@@ -20,6 +20,17 @@ app = Flask(__name__)
 # Configure CORS to allow requests from any origin for simplicity during development
 CORS(app, resources={r"/submit": {"origins": "*"}})
 
+
+o = Options()
+o.add_argument("--headless=new")
+o.add_argument("--no-sandbox")
+o.add_argument("--disable-dev-shm-usage")
+
+driver = webdriver.Chrome(service=Service(), options=o)
+driver.get("https://www.example.com")
+print("Title:", driver.title)
+driver.quit()
+
 # ===================== CONFIG =====================
 PRIOD_START_DEFAULT = "2025-12-01"
 PRIOD_END_DEFAULT = "2025-12-20"
@@ -189,18 +200,25 @@ def reschedule(driver, date, facility_id, appointment_url):
 
 def create_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Run headless on VPS
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    # Make headless robust on VPS
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")                  # required if running as root
+    chrome_options.add_argument("--disable-dev-shm-usage")       # for small /dev/shm
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument(f"--user-data-dir=/tmp/chrome_user_{random.randint(1000,9999)}")  # Unique profile
     chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    chrome_options.add_argument("--disable-features=BlinkGenPropertyTrees")
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=chrome_options
-    )
+    # If Chrome is not in PATH, set it explicitly (most distros put it here)
+    chrome_options.binary_location = "/usr/bin/google-chrome"
+
+    # Use Selenium Manager (no webdriver_manager)
+    service = Service()  # no path = Selenium finds the right chromedriver
+
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
 
 # ===================== THREAD TASK =====================
