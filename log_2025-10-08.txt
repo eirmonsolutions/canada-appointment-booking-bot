@@ -1,0 +1,75 @@
+2025-10-08 10:45:22.852993 - Exception: Message: no such window: target window already closed
+from unknown error: web view not found
+  (Session info: chrome=141.0.7390.55)
+Stacktrace:
+0   chromedriver                        0x00000001010b7598 cxxbridge1$str$ptr + 2894960
+1   chromedriver                        0x00000001010af4d4 cxxbridge1$str$ptr + 2861996
+2   chromedriver                        0x0000000100bd55ec _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 74324
+3   chromedriver                        0x0000000100baf198 chromedriver + 143768
+4   chromedriver                        0x0000000100c453fc _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 532580
+5   chromedriver                        0x0000000100c5dfb8 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 633888
+6   chromedriver                        0x0000000100c11178 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 318944
+7   chromedriver                        0x000000010107b2e4 cxxbridge1$str$ptr + 2648508
+8   chromedriver                        0x000000010107e8c0 cxxbridge1$str$ptr + 2662296
+9   chromedriver                        0x000000010105bd64 cxxbridge1$str$ptr + 2520124
+10  chromedriver                        0x000000010107f1a8 cxxbridge1$str$ptr + 2664576
+11  chromedriver                        0x000000010104d4d4 cxxbridge1$str$ptr + 2460588
+12  chromedriver                        0x000000010109eb94 cxxbridge1$str$ptr + 2794092
+13  chromedriver                        0x000000010109ed18 cxxbridge1$str$ptr + 2794480
+14  chromedriver                        0x00000001010af120 cxxbridge1$str$ptr + 2861048
+15  libsystem_pthread.dylib             0x0000000187b2cc08 _pthread_start + 136
+16  libsystem_pthread.dylib             0x0000000187b27ba8 thread_start + 8
+
+2025-10-08 10:45:25.322448 - Email sending failed: (535, b'5.7.8 Username and Password not accepted. For more information, go to\n5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-28e8d110d0bsm184779915ad.29 - gsmtp')
+2025-10-08 10:47:09.675307 - Exception: Message: no such window: target window already closed
+from unknown error: web view not found
+  (Session info: chrome=141.0.7390.55)
+Stacktrace:
+0   chromedriver                        0x000000010333b598 cxxbridge1$str$ptr + 2894960
+1   chromedriver                        0x00000001033334d4 cxxbridge1$str$ptr + 2861996
+2   chromedriver                        0x0000000102e595ec _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 74324
+3   chromedriver                        0x0000000102e33198 chromedriver + 143768
+4   chromedriver                        0x0000000102ec93fc _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 532580
+5   chromedriver                        0x0000000102ee1fb8 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 633888
+6   chromedriver                        0x0000000102e95178 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 318944
+7   chromedriver                        0x00000001032ff2e4 cxxbridge1$str$ptr + 2648508
+8   chromedriver                        0x00000001033028c0 cxxbridge1$str$ptr + 2662296
+9   chromedriver                        0x00000001032dfd64 cxxbridge1$str$ptr + 2520124
+10  chromedriver                        0x00000001033031a8 cxxbridge1$str$ptr + 2664576
+11  chromedriver                        0x00000001032d14d4 cxxbridge1$str$ptr + 2460588
+12  chromedriver                        0x0000000103322b94 cxxbridge1$str$ptr + 2794092
+13  chromedriver                        0x0000000103322d18 cxxbridge1$str$ptr + 2794480
+14  chromedriver                        0x0000000103333120 cxxbridge1$str$ptr + 2861048
+15  libsystem_pthread.dylib             0x0000000187b2cc08 _pthread_start + 136
+16  libsystem_pthread.dylib             0x0000000187b27ba8 thread_start + 8
+
+2025-10-08 10:47:12.070839 - Email sending failed: (535, b'5.7.8 Username and Password not accepted. For more information, go to\n5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-28e8d110d00sm184590625ad.4 - gsmtp')
+2025-10-08 10:54:48.123559 - Login successful.
+2025-10-08 10:54:48.124104 - Request #1
+2025-10-08 10:54:48.615893 - Available Dates: 
+2025-10-08 10:54:48.616423 - No dates found. Sleeping 5.0 hours...
+2025-10-08 10:54:48.617011 - Exception: 'email'
+2025-10-08 11:38:52.891458 - Login successful.
+2025-10-08 11:38:52.891764 - Request #1
+2025-10-08 11:38:54.000759 - Available Dates: 
+2025-10-08 11:38:54.001520 - No dates found. Sleeping 5.0 hours...
+2025-10-08 11:38:56.555596 - Email sending failed: (535, b'5.7.8 Username and Password not accepted. For more information, go to\n5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-33b529cec1esm613013a91.3 - gsmtp')
+2025-10-08 12:16:36.704201 - Login successful.
+2025-10-08 12:16:36.704678 - Request #1
+2025-10-08 12:16:37.327225 - Available Dates: 
+2025-10-08 12:16:37.327392 - No dates found. Sleeping 5.0 hours...
+2025-10-08 12:16:42.684384 - Email sending failed: 'email'
+2025-10-08 12:18:41.101211 - Login successful.
+2025-10-08 12:18:41.101495 - Request #1
+2025-10-08 12:18:41.570807 - Available Dates: 
+2025-10-08 12:18:41.571544 - No dates found. Sleeping 5.0 hours...
+2025-10-08 12:18:45.396631 - Email sending failed: 'email'
+2025-10-08 12:21:56.927242 - Login successful.
+2025-10-08 12:21:56.927627 - Request #1
+2025-10-08 12:21:57.450399 - Available Dates: 
+2025-10-08 12:21:57.450904 - No dates found. Sleeping 5.0 hours...
+2025-10-08 12:22:01.094461 - Email sent to 'manshu.developer@gmail.com'
+2025-10-08 12:43:39.843163 - Login successful.
+2025-10-08 12:43:39.843560 - Request #1
+2025-10-08 12:43:40.374108 - Available Dates: 
+2025-10-08 12:43:40.374922 - No dates found. Sleeping 5.0 hours...

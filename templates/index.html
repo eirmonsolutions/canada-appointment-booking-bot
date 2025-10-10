@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visa Appointment Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 via-blue-100 to-indigo-200 min-h-screen flex items-center justify-center">
+  <div class="max-w-4xl w-full bg-white/60 backdrop-blur-md shadow-xl rounded-2xl p-8 border border-white/30">
+    <h1 class="text-3xl font-extrabold text-center text-indigo-700 mb-6 tracking-tight">
+      🎯 Visa Appointment Bot
+    </h1>
+
+    <div class="mb-6">
+      <label class="block text-sm font-semibold text-gray-700 mb-1">Number of Students</label>
+      <input
+        type="number"
+        id="numStudents"
+        value="1"
+        min="1"
+        class="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+
+    <div id="studentForms" class="space-y-6"></div>
+
+    <div class="text-center mt-6">
+      <button
+        id="submitButton"
+        class="bg-indigo-600 hover:bg-indigo-700 transition-all duration-300 text-white px-6 py-2.5 rounded-lg font-semibold shadow-md hover:shadow-lg"
+      >
+        🚀 Submit
+      </button>
+      <p id="message" class="mt-4 hidden text-lg font-medium"></p>
+    </div>
+  </div>
+
+  <script>
+    const embassies = [
+      { value: 'en-am-yer', label: 'Armenia - Yerevan' },
+      { value: 'es-co-bog', label: 'Colombia - Bogotá' },
+      { value: 'en-ca-cal', label: 'Canada - Calgary' },
+      { value: 'en-ca-hal', label: 'Canada - Halifax' },
+      { value: 'en-ca-mon', label: 'Canada - Montreal' },
+      { value: 'en-ca-ott', label: 'Canada - Ottawa' },
+      { value: 'en-ca-que', label: 'Canada - Quebec City' },
+      { value: 'en-ca-tor', label: 'Canada - Toronto' },
+      { value: 'en-ca-van', label: 'Canada - Vancouver' }
+    ];
+
+    const numStudentsInput = document.getElementById('numStudents');
+    const studentFormsDiv = document.getElementById('studentForms');
+    const submitButton = document.getElementById('submitButton');
+    const messageP = document.getElementById('message');
+
+    function generateStudentForms(count) {
+      studentFormsDiv.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const studentDiv = document.createElement('div');
+        studentDiv.className =
+          'p-6 rounded-xl bg-white/70 backdrop-blur-lg border border-gray-200 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl';
+        studentDiv.innerHTML = `
+          <h2 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">👩‍🎓 Student ${i + 1}</h2>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Username</label>
+              <input type="text" name="username_${i}" placeholder="Enter username"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Password</label>
+              <input type="password" name="password_${i}" placeholder="Enter password"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Schedule ID</label>
+              <input type="text" name="schedule_id_${i}" placeholder="e.g., 123456"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Embassy</label>
+              <select name="embassy_${i}"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                ${embassies.map(emb => `<option value="${emb.value}">${emb.label}</option>`).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Period Start</label>
+              <input type="date" name="period_start_${i}" value="2025-12-01"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Period End</label>
+              <input type="date" name="period_end_${i}" value="2025-12-20"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+          </div>
+        `;
+        studentFormsDiv.appendChild(studentDiv);
+      }
+    }
+
+    numStudentsInput.addEventListener('change', (e) => {
+      const count = parseInt(e.target.value) || 1;
+      generateStudentForms(count);
+    });
+
+    submitButton.addEventListener('click', async () => {
+      const numStudents = parseInt(numStudentsInput.value) || 1;
+      const students = [];
+
+      for (let i = 0; i < numStudents; i++) {
+        students.push({
+          username: document.querySelector(`[name="username_${i}"]`).value,
+          password: document.querySelector(`[name="password_${i}"]`).value,
+          schedule_id: document.querySelector(`[name="schedule_id_${i}"]`).value,
+          embassy: document.querySelector(`[name="embassy_${i}"]`).value,
+          period_start: document.querySelector(`[name="period_start_${i}"]`).value,
+          period_end: document.querySelector(`[name="period_end_${i}"]`).value
+        });
+      }
+
+      try {
+        const response = await fetch('/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ num_students: numStudents, students })
+        });
+        const result = await response.json();
+        messageP.textContent = result.message || result.error;
+        messageP.classList.remove('hidden');
+        messageP.classList.toggle('text-red-600', !!result.error);
+        messageP.classList.toggle('text-green-600', !result.error);
+      } catch (error) {
+        messageP.textContent = 'Error submitting data: ' + error.message;
+        messageP.classList.remove('hidden');
+        messageP.classList.add('text-red-600');
+      }
+    });
+
+    // Initialize with one student form
+    generateStudentForms(1);
+  </script>
+</body>
+</html>
