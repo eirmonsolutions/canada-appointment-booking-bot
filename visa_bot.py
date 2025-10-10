@@ -17,7 +17,7 @@ from embassy import Embassies
 
 app = Flask(__name__)
 # Configure CORS to allow requests from any origin for simplicity during development
-CORS(app, resources={r"/submit": {"origins": "*"}})
+CORS(app, resources={r"/submit": {"origins": "*"}, r"/status": {"origins": "*"}})
 
 # ===================== CONFIG =====================
 PRIOD_START_DEFAULT = "2025-12-01"
@@ -30,6 +30,9 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_EMAIL = "manshusmartboy@gmail.com"  # Replace with your email
 SMTP_PASSWORD = "cvvrefpzcxkqahen"  # Replace with your app-specific password
+
+# Bot status
+bot_status = {"status": "Idle", "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # ===================== LOGGER =====================
 def log_info(user, msg):
@@ -186,6 +189,8 @@ def reschedule(driver, date, facility_id, appointment_url):
 
 # ===================== THREAD TASK =====================
 def process_user(user_data):
+    global bot_status
+    bot_status = {"status": "Running", "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     username = user_data["username"]
     password = user_data["password"]
     schedule_id = user_data["schedule_id"]
@@ -260,11 +265,17 @@ def process_user(user_data):
     driver.get(SIGN_OUT_LINK)
     driver.quit()
     log_info(username, "Session finished.")
+    bot_status = {"status": "Idle", "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # ===================== FLASK ROUTES =====================
 @app.route('/')
 def serve_index():
     return render_template('index.html')
+
+@app.route('/status', methods=['GET'])
+@cross_origin()
+def get_status():
+    return jsonify(bot_status)
 
 @app.route('/submit', methods=['POST', 'OPTIONS'])
 @cross_origin()  # Explicitly allow CORS for this route
@@ -293,5 +304,5 @@ def submit():
 # ===================== MAIN =====================
 if __name__ == "__main__":
     import webbrowser
-    webbrowser.open("http://127.0.0.1:5000")
-    app.run(debug=True)
+    webbrowser.open("http://148.230.86.132:5000")
+    app.run(host="148.230.86.132", port=5000, debug=True)
