@@ -7,6 +7,7 @@ import smtplib
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait as Wait
 from selenium.webdriver.common.by import By
@@ -183,6 +184,24 @@ def reschedule(driver, date, facility_id, appointment_url):
             return "FAIL", f"Reschedule Failed {date} {time_slot}"
     except Exception as e:
         return "EXCEPTION", str(e)
+    
+
+
+def create_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")  # Run headless on VPS
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument(f"--user-data-dir=/tmp/chrome_user_{random.randint(1000,9999)}")  # Unique profile
+    chrome_options.add_argument("--remote-debugging-port=9222")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
+    )
+    return driver
 
 # ===================== THREAD TASK =====================
 def process_user(user_data):
@@ -203,8 +222,9 @@ def process_user(user_data):
     TIME_URL = links["TIME_URL"]
     SIGN_OUT_LINK = links["SIGN_OUT_LINK"]
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    driver.set_window_position(random.randint(0, 800), random.randint(0, 400))
+    # driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    # driver.set_window_position(random.randint(0, 800), random.randint(0, 400)
+    driver = create_driver()
 
     first_loop = True
     req_count = 0
@@ -292,6 +312,4 @@ def submit():
 
 # ===================== MAIN =====================
 if __name__ == "__main__":
-    import webbrowser
-    webbrowser.open("http://148.230.86.132:5000")
-    app.run(host="148.230.86.132", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
