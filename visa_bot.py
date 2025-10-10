@@ -35,8 +35,8 @@ LOG_FILE = f"log_{datetime.now().date()}.txt"
 # SMTP from ENV (do NOT hardcode in code)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-SMTP_EMAIL = os.environ.get("SMTP_EMAIL", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_EMAIL = "manshusmartboy@gmail.com" 
+SMTP_PASSWORD = "cvvrefpzcxkqahen" 
 
 # Debug dumps (screenshots + HTML on exception)
 DEBUG_DUMPS = True
