@@ -19,6 +19,11 @@
     </div>
 
     <div class="mb-6">
+      <label class="block text-sm font-semibold text-gray-700 mb-1">Available Appointment Dates</label>
+      <p id="availableDates" class="text-lg font-medium text-gray-700">No dates available</p>
+    </div>
+
+    <div class="mb-6">
       <label class="block text-sm font-semibold text-gray-700 mb-1">Number of Students</label>
       <input
         type="number"
@@ -61,6 +66,7 @@
     const messageP = document.getElementById('message');
     const botStatusP = document.getElementById('botStatus');
     const lastUpdatedP = document.getElementById('lastUpdated');
+    const availableDatesP = document.getElementById('availableDates');
 
     async function updateBotStatus() {
       try {
@@ -74,6 +80,24 @@
         botStatusP.textContent = 'Error fetching status';
         botStatusP.classList.add('text-red-600');
         lastUpdatedP.textContent = 'Last updated: Unknown';
+      }
+    }
+
+    async function updateAvailableDates() {
+      try {
+        const response = await fetch('http://148.230.86.132:5000/dates');
+        const data = await response.json();
+        if (data.dates && data.dates.length > 0) {
+          availableDatesP.textContent = `Available Dates: ${data.dates.join(', ')}`;
+          availableDatesP.classList.add('text-green-600');
+        } else {
+          availableDatesP.textContent = 'No dates available';
+          availableDatesP.classList.remove('text-green-600');
+          availableDatesP.classList.add('text-gray-700');
+        }
+      } catch (error) {
+        availableDatesP.textContent = 'Error fetching dates';
+        availableDatesP.classList.add('text-red-600');
       }
     }
 
@@ -160,7 +184,8 @@
         messageP.classList.remove('hidden');
         messageP.classList.toggle('text-red-600', !!result.error);
         messageP.classList.toggle('text-green-600', !result.error);
-        updateBotStatus(); // Update status after submission
+        updateBotStatus();
+        updateAvailableDates();
       } catch (error) {
         messageP.textContent = 'Error submitting data: ' + error.message;
         messageP.classList.remove('hidden');
@@ -171,9 +196,13 @@
     // Initialize with one student form
     generateStudentForms(1);
 
-    // Periodically update bot status
+    // Periodically update bot status and available dates
     updateBotStatus();
-    setInterval(updateBotStatus, 5000); // Update every 5 seconds
+    updateAvailableDates();
+    setInterval(() => {
+      updateBotStatus();
+      updateAvailableDates();
+    }, 5000); // Update every 5 seconds
   </script>
 </body>
 </html>

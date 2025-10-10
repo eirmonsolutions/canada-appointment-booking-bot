@@ -14,10 +14,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS, cross_origin
 from embassy import Embassies
+from selenium.webdriver.chrome.options import Options
 
 app = Flask(__name__)
 # Configure CORS to allow requests from any origin for simplicity during development
-CORS(app, resources={r"/submit": {"origins": "*"}, r"/status": {"origins": "*"}})
+CORS(app, resources={r"/submit": {"origins": "*"}, r"/status": {"origins": "*"}, r"/dates": {"origins": "*"}})
 
 # ===================== CONFIG =====================
 PRIOD_START_DEFAULT = "2025-12-01"
@@ -31,8 +32,9 @@ SMTP_PORT = 587
 SMTP_EMAIL = "manshusmartboy@gmail.com"  # Replace with your email
 SMTP_PASSWORD = "cvvrefpzcxkqahen"  # Replace with your app-specific password
 
-# Bot status
+# Bot status and available dates
 bot_status = {"status": "Idle", "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+available_dates = []
 
 # ===================== LOGGER =====================
 def log_info(user, msg):
@@ -189,7 +191,7 @@ def reschedule(driver, date, facility_id, appointment_url):
 
 # ===================== THREAD TASK =====================
 def process_user(user_data):
-    global bot_status
+    global bot_status, available_dates
     bot_status = {"status": "Running", "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     username = user_data["username"]
     password = user_data["password"]
@@ -208,7 +210,13 @@ def process_user(user_data):
     TIME_URL = links["TIME_URL"]
     SIGN_OUT_LINK = links["SIGN_OUT_LINK"]
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    # Set up Chrome options for headless mode
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     driver.set_window_position(random.randint(0, 800), random.randint(0, 400))
 
     first_loop = True
@@ -276,6 +284,11 @@ def serve_index():
 @cross_origin()
 def get_status():
     return jsonify(bot_status)
+
+@app.route('/dates', methods=['GET'])
+@cross_origin()
+def get_dates():
+    return jsonify({"dates": available_dates})
 
 @app.route('/submit', methods=['POST', 'OPTIONS'])
 @cross_origin()  # Explicitly allow CORS for this route
