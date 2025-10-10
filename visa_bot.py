@@ -294,4 +294,4 @@ def submit():
 if __name__ == "__main__":
     import webbrowser
     webbrowser.open("http://148.230.86.132:5000")
-    app.run(debug=True)
+    app.run(host="148.230.86.132", port=5000, debug=True)
