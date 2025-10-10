@@ -37,3 +37,5 @@ pip install sendgrid==6.9.7
 
 ## Acknowledgement
 Thanks to everyone who participated in this repo. Lots of people are using your excellent product without even appreciating you.
+SMTP_EMAIL = "manshusmartboy@gmail.com" 
+SMTP_PASSWORD = "cvvrefpzcxkqahen" 
