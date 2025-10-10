@@ -6,3 +6,63 @@
 2025-10-10 11:31:34.763709 - Request #1
 2025-10-10 11:31:35.238508 - Available Dates: 
 2025-10-10 11:31:35.239053 - No dates found. Sleeping 5.0 hours...
+2025-10-10 12:47:18.267517 - Exception: Message: 
+Stacktrace:
+0   chromedriver                        0x0000000102b3b5f0 cxxbridge1$str$ptr + 2894960
+1   chromedriver                        0x0000000102b3352c cxxbridge1$str$ptr + 2861996
+2   chromedriver                        0x00000001026595ec _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 74324
+3   chromedriver                        0x00000001026a0fb4 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 367644
+4   chromedriver                        0x00000001026e2458 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 635072
+5   chromedriver                        0x0000000102695178 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 318944
+6   chromedriver                        0x0000000102aff33c cxxbridge1$str$ptr + 2648508
+7   chromedriver                        0x0000000102b02918 cxxbridge1$str$ptr + 2662296
+8   chromedriver                        0x0000000102adfdbc cxxbridge1$str$ptr + 2520124
+9   chromedriver                        0x0000000102b03200 cxxbridge1$str$ptr + 2664576
+10  chromedriver                        0x0000000102ad152c cxxbridge1$str$ptr + 2460588
+11  chromedriver                        0x0000000102b22bec cxxbridge1$str$ptr + 2794092
+12  chromedriver                        0x0000000102b22d70 cxxbridge1$str$ptr + 2794480
+13  chromedriver                        0x0000000102b33178 cxxbridge1$str$ptr + 2861048
+14  libsystem_pthread.dylib             0x0000000187b2cc08 _pthread_start + 136
+15  libsystem_pthread.dylib             0x0000000187b27ba8 thread_start + 8
+
+2025-10-10 12:47:19.307616 - Session finished.
+2025-10-10 12:47:45.214814 - Exception: Message: 
+Stacktrace:
+0   chromedriver                        0x0000000102fcb5f0 cxxbridge1$str$ptr + 2894960
+1   chromedriver                        0x0000000102fc352c cxxbridge1$str$ptr + 2861996
+2   chromedriver                        0x0000000102ae95ec _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 74324
+3   chromedriver                        0x0000000102b30fb4 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 367644
+4   chromedriver                        0x0000000102b72458 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 635072
+5   chromedriver                        0x0000000102b25178 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 318944
+6   chromedriver                        0x0000000102f8f33c cxxbridge1$str$ptr + 2648508
+7   chromedriver                        0x0000000102f92918 cxxbridge1$str$ptr + 2662296
+8   chromedriver                        0x0000000102f6fdbc cxxbridge1$str$ptr + 2520124
+9   chromedriver                        0x0000000102f93200 cxxbridge1$str$ptr + 2664576
+10  chromedriver                        0x0000000102f6152c cxxbridge1$str$ptr + 2460588
+11  chromedriver                        0x0000000102fb2bec cxxbridge1$str$ptr + 2794092
+12  chromedriver                        0x0000000102fb2d70 cxxbridge1$str$ptr + 2794480
+13  chromedriver                        0x0000000102fc3178 cxxbridge1$str$ptr + 2861048
+14  libsystem_pthread.dylib             0x0000000187b2cc08 _pthread_start + 136
+15  libsystem_pthread.dylib             0x0000000187b27ba8 thread_start + 8
+
+2025-10-10 12:47:46.954626 - Session finished.
+2025-10-10 12:48:01.983650 - Exception: Message: 
+Stacktrace:
+0   chromedriver                        0x00000001055175f0 cxxbridge1$str$ptr + 2894960
+1   chromedriver                        0x000000010550f52c cxxbridge1$str$ptr + 2861996
+2   chromedriver                        0x00000001050355ec _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 74324
+3   chromedriver                        0x000000010507cfb4 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 367644
+4   chromedriver                        0x00000001050be458 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 635072
+5   chromedriver                        0x0000000105071178 _RNvCs47EqcsrPRmA_7___rustc35___rust_no_alloc_shim_is_unstable_v2 + 318944
+6   chromedriver                        0x00000001054db33c cxxbridge1$str$ptr + 2648508
+7   chromedriver                        0x00000001054de918 cxxbridge1$str$ptr + 2662296
+8   chromedriver                        0x00000001054bbdbc cxxbridge1$str$ptr + 2520124
+9   chromedriver                        0x00000001054df200 cxxbridge1$str$ptr + 2664576
+10  chromedriver                        0x00000001054ad52c cxxbridge1$str$ptr + 2460588
+11  chromedriver                        0x00000001054febec cxxbridge1$str$ptr + 2794092
+12  chromedriver                        0x00000001054fed70 cxxbridge1$str$ptr + 2794480
+13  chromedriver                        0x000000010550f178 cxxbridge1$str$ptr + 2861048
+14  libsystem_pthread.dylib             0x0000000187b2cc08 _pthread_start + 136
+15  libsystem_pthread.dylib             0x0000000187b27ba8 thread_start + 8
+
+2025-10-10 12:48:03.029675 - Session finished.
