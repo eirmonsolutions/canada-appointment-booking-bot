@@ -29,6 +29,16 @@ app = Flask(__name__, template_folder="templates")
 # DEV: open CORS, PROD: tighten to your IP/origin
 CORS(app, resources={r"/submit": {"origins": "*"}, r"/stream": {"origins": "*"}})
 
+NOISE_PATTERNS = [
+    r"from unknown error: web view not found",
+    r"invalid session id: session deleted as the browser has closed the connection",
+    r"disconnected: not connected to DevTools",
+    r"DevToolsActivePort file doesn't exist",
+    r"HTTPConnectionPool\(host='localhost', port=\d+\): Max retries exceeded",
+    r"Failed to establish a new connection: \[Errno 111\] Connection refused",
+    r"Message:\s*$",  # empty Message:
+]
+
 # ===================== CONFIG =====================
 PRIOD_START_DEFAULT = "2025-12-01"
 PRIOD_END_DEFAULT = "2025-12-20"
@@ -38,8 +48,8 @@ LOG_FILE = f"log_{datetime.now().date()}.txt"
 # SMTP from ENV (do NOT hardcode in code)
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_EMAIL = "manshusmartboy@gmail.com" 
-SMTP_PASSWORD = "cvvrefpzcxkqahen" 
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")      # e.g., "your@gmail.com"
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # e.g., "app_password"
 
 # Debug dumps (screenshots + HTML on exception)
 DEBUG_DUMPS = True
@@ -58,6 +68,40 @@ def _user_key(username: str) -> str:
     return (username or "").strip().lower()
 
 
+def normalize_exc_msg(e: Exception) -> str:
+    """Return a short, human readable, de-noised error key."""
+    msg = str(e) if e else ""
+    low = msg.lower()
+
+    if "web view not found" in low:
+        return "webview_not_found"
+    if "invalid session id" in low or "not connected to devtools" in low:
+        return "invalid_session"
+    if "devtoolsactiveport" in low:
+        return "devtools_port"
+    if "connection refused" in low or "max retries exceeded" in low:
+        return "driver_comm_refused"
+    if "json parse failed" in low:
+        return "json_parse_failed"
+    if "cookie missing" in low:
+        return "cookie_missing"
+    if "timed out" in low and "wait" in low:
+        return "wait_timeout"
+    if "no such element" in low:
+        return "no_such_element"
+    # generic fallback
+    return (re.sub(r"\s+", " ", msg).strip() or "unknown_error")
+
+
+
+def is_noise_trace(text: str) -> bool:
+    if not text:
+        return True
+    for pat in NOISE_PATTERNS:
+        if re.search(pat, text, flags=re.I):
+            return True
+    return False
+
 def _push_event(username: str, payload: dict):
     """Broadcast a dict payload to all EventSource clients of this user."""
     key = _user_key(username)
@@ -74,8 +118,18 @@ def _push_event(username: str, payload: dict):
 
 
 # ===================== LOG & CSV =====================
+def _strip_stack_blobs(s: str) -> str:
+    if not s:
+        return s
+    # Drop everything after 'Stacktrace:' to keep logs clean
+    s = s.split("Stacktrace:")[0].rstrip()
+    # Remove hex frames like "#0 0x... <unknown>"
+    s = re.sub(r"#\d+\s+0x[0-9a-fA-F]+\s+<unknown>", "", s)
+    return re.sub(r"\s{2,}", " ", s).strip()
+
 def log_info(user, msg):
-    line = f"[{user}] {msg}"
+    clean = _strip_stack_blobs(str(msg))
+    line = f"[{user}] {clean}"
     print(line, flush=True)
     with _log_lock:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -107,26 +161,22 @@ def _mask(s: str) -> str:
 def save_to_csv(data, status, result_msg):
     row = {
         "username": data.get("username", ""),
-        # Mask password to avoid storing plaintext
-        "password": _mask(data.get("password", "")),
+        "password": "",  # 🔒 don't store plaintext
         "schedule_id": data.get("schedule_id", ""),
         "embassy": data.get("embassy", ""),
         "period_start": data.get("period_start", PRIOD_START_DEFAULT),
         "period_end": data.get("period_end", PRIOD_END_DEFAULT),
         "status": status,
-        "result": result_msg,
+        "result": (result_msg or "")[:300],  # clamp length
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     with _file_lock:
         write_header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
         with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=[
-                    "username", "password", "schedule_id", "embassy",
-                    "period_start", "period_end", "status", "result", "timestamp"
-                ]
-            )
+            writer = csv.DictWriter(f, fieldnames=[
+                "username","password","schedule_id","embassy",
+                "period_start","period_end","status","result","timestamp"
+            ])
             if write_header:
                 writer.writeheader()
             writer.writerow(row)
