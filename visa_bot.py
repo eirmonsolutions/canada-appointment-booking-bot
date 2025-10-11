@@ -1,384 +1,276 @@
-import os
 import time
 import json
 import random
-import threading
-from threading import Lock
-import csv
-import smtplib
-import traceback
+import requests
+import configparser
 from datetime import datetime
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait as Wait
 from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 
-from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS, cross_origin
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
-from embassy import Embassies  # your mapping
+from embassy import *
 
-# ===================== FLASK =====================
-app = Flask(__name__)
-# DEV: open CORS, PROD: tighten to your IP/origin
-CORS(app, resources={r"/submit": {"origins": "*"}})
+# -------------------- CONFIG --------------------
+config = configparser.ConfigParser()
+config.read('config.ini')
 
-# ===================== CONFIG =====================
-PRIOD_START_DEFAULT = "2025-12-01"
-PRIOD_END_DEFAULT = "2025-12-20"
-CSV_FILE = "visa_appointments.csv"
-LOG_FILE = f"log_{datetime.now().date()}.txt"
+# Personal Info
+USERNAME = config['PERSONAL_INFO']['USERNAME']
+PASSWORD = config['PERSONAL_INFO']['PASSWORD']
+SCHEDULE_ID = config['PERSONAL_INFO']['SCHEDULE_ID']
+PRIOD_START = config['PERSONAL_INFO']['PRIOD_START']
+PRIOD_END = config['PERSONAL_INFO']['PRIOD_END']
+YOUR_EMBASSY = config['PERSONAL_INFO']['YOUR_EMBASSY'] 
+EMBASSY = Embassies[YOUR_EMBASSY][0]
+FACILITY_ID = Embassies[YOUR_EMBASSY][1]
+REGEX_CONTINUE = Embassies[YOUR_EMBASSY][2]
 
-# SMTP from ENV (do NOT hardcode in code)
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_EMAIL = "manshusmartboy@gmail.com" 
-SMTP_PASSWORD = "cvvrefpzcxkqahen" 
+# Notification
+SENDGRID_API_KEY = config['NOTIFICATION']['SENDGRID_API_KEY']
+PUSHOVER_TOKEN = config['NOTIFICATION']['PUSHOVER_TOKEN']
+PUSHOVER_USER = config['NOTIFICATION']['PUSHOVER_USER']
+PERSONAL_SITE_USER = config['NOTIFICATION']['PERSONAL_SITE_USER']
+PERSONAL_SITE_PASS = config['NOTIFICATION']['PERSONAL_SITE_PASS']
+PUSH_TARGET_EMAIL = config['NOTIFICATION']['PUSH_TARGET_EMAIL']
+PERSONAL_PUSHER_URL = config['NOTIFICATION']['PERSONAL_PUSHER_URL']
 
-# Debug dumps (screenshots + HTML on exception)
-DEBUG_DUMPS = True
+# Time
+minute = 60
+hour = 60 * minute
+STEP_TIME = 0.5
+RETRY_TIME_L_BOUND = int(config['TIME'].getfloat('RETRY_TIME_L_BOUND'))
+RETRY_TIME_U_BOUND = int(config['TIME'].getfloat('RETRY_TIME_U_BOUND'))
+WORK_LIMIT_TIME = config['TIME'].getfloat('WORK_LIMIT_TIME')
+WORK_COOLDOWN_TIME = config['TIME'].getfloat('WORK_COOLDOWN_TIME')
+BAN_COOLDOWN_TIME = config['TIME'].getfloat('BAN_COOLDOWN_TIME')
 
-# File write locks (thread-safe)
-_file_lock = Lock()
-_log_lock = Lock()
+# Chrome Driver
+LOCAL_USE = config['CHROMEDRIVER'].getboolean('LOCAL_USE')
+HUB_ADDRESS = config['CHROMEDRIVER']['HUB_ADDRESS']
 
-# ===================== UTILS =====================
-def log_info(user, msg):
-    line = f"[{user}] {msg}"
-    print(line, flush=True)
-    with _log_lock:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} - {line}\n")
+# URLs
+SIGN_IN_LINK = f"https://ais.usvisa-info.com/{EMBASSY}/niv/users/sign_in"
+APPOINTMENT_URL = f"https://ais.usvisa-info.com/{EMBASSY}/niv/schedule/{SCHEDULE_ID}/appointment"
+DATE_URL = f"https://ais.usvisa-info.com/{EMBASSY}/niv/schedule/{SCHEDULE_ID}/appointment/days/{FACILITY_ID}.json?appointments[expedite]=false"
+TIME_URL = f"https://ais.usvisa-info.com/{EMBASSY}/niv/schedule/{SCHEDULE_ID}/appointment/times/{FACILITY_ID}.json?date=%s&appointments[expedite]=false"
+SIGN_OUT_LINK = f"https://ais.usvisa-info.com/{EMBASSY}/niv/users/sign_out"
 
-def dump_debug(driver, prefix="debug"):
-    if not DEBUG_DUMPS:
-        return
-    try:
-        os.makedirs("debug", exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        driver.save_screenshot(f"debug/{prefix}_{ts}.png")
-        with open(f"debug/{prefix}_{ts}.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-    except Exception:
-        pass  # best effort
+JS_SCRIPT = ("var req = new XMLHttpRequest();"
+             f"req.open('GET', '%s', false);"
+             "req.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');"
+             "req.setRequestHeader('X-Requested-With', 'XMLHttpRequest');"
+             f"req.setRequestHeader('Cookie', '_yatri_session=%s');"
+             "req.send(null);"
+             "return req.responseText;")
 
-def save_to_csv(data, status, result_msg):
-    row = {
-        "username": data.get("username", ""),
-        "password": data.get("password", ""),  # consider NOT saving plaintext in real use
-        "schedule_id": data.get("schedule_id", ""),
-        "embassy": data.get("embassy", ""),
-        "period_start": data.get("period_start", PRIOD_START_DEFAULT),
-        "period_end": data.get("period_end", PRIOD_END_DEFAULT),
-        "status": status,
-        "result": result_msg,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    with _file_lock:
-        write_header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
-        with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["username","password","schedule_id","embassy",
-                                                   "period_start","period_end","status","result","timestamp"])
-            if write_header:
-                writer.writeheader()
-            writer.writerow(row)
+# -------------------- FUNCTIONS --------------------
 
-def send_email(data, status, result_msg):
-    if not (SMTP_EMAIL and SMTP_PASSWORD):
-        log_info(data.get("username","?"), "SMTP creds missing; skipping email.")
-        return
-    subject = f"Visa Appointment Status: {status}"
-    body = f"""Appointment Details:
-Username: {data.get('username')}
+def send_notification(title, msg):
+    print(f"Sending notification: {title}")
+    # SendGrid Email
+    if SENDGRID_API_KEY:
+        message = Mail(from_email=USERNAME, to_emails=USERNAME, subject=title, html_content=msg)
+        try:
+            sg = SendGridAPIClient(SENDGRID_API_KEY)
+            response = sg.send(message)
+            print("SendGrid Response:", response.status_code)
+        except Exception as e:
+            print("SendGrid Error:", e)
+    # Pushover
+    if PUSHOVER_TOKEN:
+        try:
+            url = "https://api.pushover.net/1/messages.json"
+            data = {"token": PUSHOVER_TOKEN, "user": PUSHOVER_USER, "message": msg}
+            requests.post(url, data)
+        except Exception as e:
+            print("Pushover Error:", e)
+    # Personal Pusher
+    if PERSONAL_SITE_USER:
+        try:
+            url = PERSONAL_PUSHER_URL
+            data = {
+                "title": "VISA - " + str(title),
+                "user": PERSONAL_SITE_USER,
+                "pass": PERSONAL_SITE_PASS,
+                "email": PUSH_TARGET_EMAIL,
+                "msg": msg,
+            }
+            requests.post(url, data)
+        except Exception as e:
+            print("Personal Pusher Error:", e)
 
-Embassy: {data.get('embassy')}
-Schedule ID: {data.get('schedule_id')}
-Period: {data.get('period_start')} to {data.get('period_end')}
-Status: {status}
-Result: {result_msg}
-Timestamp: {datetime.now():%Y-%m-%d %H:%M:%S}
-"""
-    msg = f"Subject: {subject}\nFrom: {SMTP_EMAIL}\nTo: manshu.developer@gmail.com\n\n{body}"
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
-            server.starttls()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, 'manshu.developer@gmail.com', msg)
-        log_info(data.get("username","?"), "Email sent to 'manshu.developer@gmail.com'")
-    except Exception as e:
-        log_info(data.get("username","?"), f"Email sending failed: {e}")
 
-# ===================== LINKS & JS =====================
-def make_links(embassy, schedule_id, facility_id):
-    base = f"https://ais.usvisa-info.com/{embassy}/niv"
-    return {
-        "SIGN_IN_LINK": f"{base}/users/sign_in",
-        "APPOINTMENT_URL": f"{base}/schedule/{schedule_id}/appointment",
-        "DATE_URL": f"{base}/schedule/{schedule_id}/appointment/days/{facility_id}.json?appointments[expedite]=false",
-        "TIME_URL_TPL": f"{base}/schedule/{schedule_id}/appointment/times/{{facility}}.json?date=%s&appointments[expedite]=false".replace("{facility}", str(facility_id)),
-        "SIGN_OUT_LINK": f"{base}/users/sign_out"
-    }
-
-JS_SCRIPT = (
-    "var req = new XMLHttpRequest();"
-    "req.open('GET', '%s', false);"
-    "req.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');"
-    "req.setRequestHeader('X-Requested-With', 'XMLHttpRequest');"
-    "req.setRequestHeader('Cookie', '_yatri_session=%s');"
-    "req.send(null);"
-    "return req.responseText;"
-)
-
-# ===================== SELENIUM HELPERS =====================
-def auto_action(driver, label, find_by, el, action, value="", sleep_time=0):
-    print(f"\t{label}:", end="", flush=True)
-    if find_by == "id":
-        item = driver.find_element(By.ID, el)
-    elif find_by == "name":
-        item = driver.find_element(By.NAME, el)
-    elif find_by == "class":
-        item = driver.find_element(By.CLASS_NAME, el)
-    elif find_by == "xpath":
-        item = driver.find_element(By.XPATH, el)
-    else:
-        print(" BAD_LOCATOR")
-        return
-    if action == "send":
-        item.clear()
-        item.send_keys(value)
-    elif action == "click":
-        item.click()
-    else:
-        print(" BAD_ACTION")
-        return
-    print(" OK")
+def auto_action(label, find_by, el_type, action, value, sleep_time=0):
+    print("\t"+ label +":", end="")
+    match find_by.lower():
+        case 'id':
+            item = driver.find_element(By.ID, el_type)
+        case 'name':
+            item = driver.find_element(By.NAME, el_type)
+        case 'class':
+            item = driver.find_element(By.CLASS_NAME, el_type)
+        case 'xpath':
+            item = driver.find_element(By.XPATH, el_type)
+        case _:
+            return 0
+    match action.lower():
+        case 'send':
+            item.send_keys(value)
+        case 'click':
+            item.click()
+        case _:
+            return 0
+    print("\t\tCheck!")
     if sleep_time:
         time.sleep(sleep_time)
 
-def create_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")                  # if running as root
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument("--disable-software-rasterizer")
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-    chrome_options.add_argument("--disable-features=BlinkGenPropertyTrees")
-    chrome_options.binary_location = "/usr/bin/google-chrome"    # adjust if different
-    service = Service()  # Selenium Manager resolves chromedriver
-    return webdriver.Chrome(service=service, options=chrome_options)
 
-def start_process(driver, username, password, regex_continue, sign_in_link, step_time=0.5):
-    driver.get(sign_in_link)
+def start_process():
+    driver.get(SIGN_IN_LINK)
+    time.sleep(STEP_TIME)
     Wait(driver, 60).until(EC.presence_of_element_located((By.NAME, "commit")))
-    # optional arrow; ignore if not present
-    try:
-        auto_action(driver, "Bounce", "xpath", '//a[contains(@class,"down-arrow")]', "click", "", step_time)
-    except Exception:
-        pass
-    auto_action(driver, "Email", "id", "user_email", "send", username, step_time)
-    auto_action(driver, "Password", "id", "user_password", "send", password, step_time)
-    # privacy checkbox: stable selector first, fallback second
-    try:
-        driver.find_element(By.CSS_SELECTOR, "input#policy_confirmed").click()
-    except Exception:
-        try:
-            auto_action(driver, "Privacy-fb", "class", "icheckbox", "click", "", step_time)
-        except Exception:
-            pass
-    auto_action(driver, "Enter Panel", "name", "commit", "click", "", step_time)
-    Wait(driver, 60).until(EC.presence_of_element_located((By.XPATH, f"//a[contains(text(), '{regex_continue}')]")))
+    auto_action("Click bounce", "xpath", '//a[@class="down-arrow bounce"]', "click", "", STEP_TIME)
+    auto_action("Email", "id", "user_email", "send", USERNAME, STEP_TIME)
+    auto_action("Password", "id", "user_password", "send", PASSWORD, STEP_TIME)
+    auto_action("Privacy", "class", "icheckbox", "click", "", STEP_TIME)
+    auto_action("Enter Panel", "name", "commit", "click", "", STEP_TIME)
+    Wait(driver, 60).until(EC.presence_of_element_located((By.XPATH, "//a[contains(text(), '" + REGEX_CONTINUE + "')]")))
+    print("\n\tLogin successful!\n")
 
-def _require_session_cookie(driver, who=""):
-    c = driver.get_cookie("_yatri_session")
-    if not c or "value" not in c:
-        raise RuntimeError(f"_yatri_session cookie missing ({who}) — login likely failed")
-    return c["value"]
 
-def get_date(driver, date_url):
-    session = _require_session_cookie(driver, "get_date")
-    script = JS_SCRIPT % (str(date_url), session)
+def reschedule(date):
     try:
-        raw = driver.execute_script(script)
-        data = json.loads(raw) if raw else []
-        if isinstance(data, dict) and "available_dates" in data:
-            # some endpoints wrap in a key
-            return data.get("available_dates") or []
-        return data or []
+        time_slot = get_time(date)
     except Exception as e:
-        raise RuntimeError(f"get_date JSON parse failed: {e}")
+        return ["FAIL", f"Failed to get time: {e}"]
 
-def get_time(driver, date, time_url_tpl):
-    session = _require_session_cookie(driver, "get_time")
-    time_url = time_url_tpl % date
+    driver.get(APPOINTMENT_URL)
+    headers = {
+        "User-Agent": driver.execute_script("return navigator.userAgent;"),
+        "Referer": APPOINTMENT_URL,
+        "Cookie": "_yatri_session=" + driver.get_cookie("_yatri_session")["value"]
+    }
+    data = {
+        "utf8": driver.find_element(By.NAME, 'utf8').get_attribute('value'),
+        "authenticity_token": driver.find_element(By.NAME, 'authenticity_token').get_attribute('value'),
+        "confirmed_limit_message": driver.find_element(By.NAME, 'confirmed_limit_message').get_attribute('value'),
+        "use_consulate_appointment_capacity": driver.find_element(By.NAME, 'use_consulate_appointment_capacity').get_attribute('value'),
+        "appointments[consulate_appointment][facility_id]": FACILITY_ID,
+        "appointments[consulate_appointment][date]": date,
+        "appointments[consulate_appointment][time]": time_slot,
+    }
+    r = requests.post(APPOINTMENT_URL, headers=headers, data=data)
+    if 'Successfully Scheduled' in r.text:
+        return ["SUCCESS", f"Rescheduled Successfully! {date} {time_slot}"]
+    return ["FAIL", f"Reschedule Failed! {date} {time_slot}"]
+
+
+def get_date():
+    session = driver.get_cookie("_yatri_session")["value"]
+    script = JS_SCRIPT % (str(DATE_URL), session)
+    content = driver.execute_script(script)
+    return json.loads(content)
+
+
+def get_time(date):
+    time_url = TIME_URL % date
+    session = driver.get_cookie("_yatri_session")["value"]
     script = JS_SCRIPT % (str(time_url), session)
-    raw = driver.execute_script(script)
-    try:
-        data = json.loads(raw) if raw else {}
-        times = data.get("available_times") or []
-        return times[-1] if times else None
-    except Exception as e:
-        raise RuntimeError(f"get_time JSON parse failed: {e}")
+    content = driver.execute_script(script)
+    data = json.loads(content)
+    time_slot = data.get("available_times")[-1]
+    print(f"Got time successfully! {date} {time_slot}")
+    return time_slot
 
-def reschedule(driver, date, facility_id, appointment_url, time_url_tpl):
-    time_slot = get_time(driver, date, time_url_tpl)
-    if not time_slot:
-        return "FAIL", f"No time available for {date}"
-    driver.get(appointment_url)
-    try:
-        import requests
-        headers = {
-            "User-Agent": driver.execute_script("return navigator.userAgent;"),
-            "Referer": appointment_url,
-            "Cookie": "_yatri_session=" + _require_session_cookie(driver, "reschedule")
-        }
-        data = {
-            "utf8": driver.find_element(By.NAME, 'utf8').get_attribute('value'),
-            "authenticity_token": driver.find_element(By.NAME, 'authenticity_token').get_attribute('value'),
-            "confirmed_limit_message": driver.find_element(By.NAME, 'confirmed_limit_message').get_attribute('value'),
-            "use_consulate_appointment_capacity": driver.find_element(By.NAME, 'use_consulate_appointment_capacity').get_attribute('value'),
-            "appointments[consulate_appointment][facility_id]": facility_id,
-            "appointments[consulate_appointment][date]": date,
-            "appointments[consulate_appointment][time]": time_slot,
-        }
-        r = requests.post(appointment_url, headers=headers, data=data, timeout=30)
-        if "Successfully Scheduled" in r.text:
-            return "SUCCESS", f"Rescheduled Successfully! {date} {time_slot}"
-        return "FAIL", f"Reschedule Failed {date} {time_slot}"
-    except Exception as e:
-        return "EXCEPTION", str(e)
 
-# ===================== THREAD TASK =====================
-def process_user(user_data):
-    username = user_data["username"]
-    password = user_data["password"]
-    schedule_id = user_data["schedule_id"]
-    embassy_key = user_data["embassy"]
-    period_start = user_data.get("period_start", PRIOD_START_DEFAULT)
-    period_end = user_data.get("period_end", PRIOD_END_DEFAULT)
+def get_available_date(dates):
+    PED = datetime.strptime(PRIOD_END, "%Y-%m-%d")
+    PSD = datetime.strptime(PRIOD_START, "%Y-%m-%d")
+    for d in dates:
+        date = d.get('date')
+        new_date = datetime.strptime(date, "%Y-%m-%d")
+        if PSD < new_date < PED:
+            return date
+    return None
 
-    embassy_info = Embassies.get(embassy_key, ["en-ca", 95, "Continue"])
-    embassy, facility_id, regex_continue = embassy_info
-    links = make_links(embassy, schedule_id, facility_id)
 
-    SIGN_IN_LINK = links["SIGN_IN_LINK"]
-    APPOINTMENT_URL = links["APPOINTMENT_URL"]
-    DATE_URL = links["DATE_URL"]
-    TIME_URL_TPL = links["TIME_URL_TPL"]
-    SIGN_OUT_LINK = links["SIGN_OUT_LINK"]
+def info_logger(file_path, log):
+    with open(file_path, "a") as file:
+        file.write(str(datetime.now().time()) + ":\n" + log + "\n")
 
-    driver = None
-    first_loop = True
-    req_count = 0
-    retry_time_l_bound = 10
-    retry_time_u_bound = 120
-    ban_cooldown_time = 5 * 3600  # 5 hours
 
-    try:
-        driver = create_driver()
+# -------------------- DRIVER INIT --------------------
+if LOCAL_USE:
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+else:
+    driver = webdriver.Remote(command_executor=HUB_ADDRESS, options=webdriver.ChromeOptions())
 
-        while True:
-            try:
-                if first_loop:
-                    start_process(driver, username, password, regex_continue, SIGN_IN_LINK)
-                    log_info(username, "Login successful.")
-                    first_loop = False
 
-                req_count += 1
-                log_info(username, f"Request #{req_count}")
-                dates_payload = get_date(driver, DATE_URL)
-                # normalize to list of {"date": "YYYY-MM-DD"}
-                if dates_payload and isinstance(dates_payload, list) and isinstance(dates_payload[0], dict) and "date" in dates_payload[0]:
-                    available_dates = [d.get('date') for d in dates_payload]
-                elif isinstance(dates_payload, list):
-                    available_dates = dates_payload
-                else:
-                    available_dates = []
-
-                log_info(username, f"Available Dates: {', '.join(available_dates) if available_dates else 'NONE'}")
-
-                if not available_dates:
-                    log_info(username, f"No dates found. Sleeping {ban_cooldown_time/3600} hours...")
-                    save_to_csv(user_data, "FAIL", "No dates found")
-                    time.sleep(ban_cooldown_time)
-                    first_loop = True
-                    continue
-
-                psd = datetime.strptime(period_start, "%Y-%m-%d")
-                ped = datetime.strptime(period_end, "%Y-%m-%d")
-                valid_dates = [d for d in available_dates if psd <= datetime.strptime(d, "%Y-%m-%d") <= ped]
-
-                if valid_dates:
-                    date = valid_dates[0]
-                    status, msg = reschedule(driver, date, facility_id, APPOINTMENT_URL, TIME_URL_TPL)
-                    log_info(username, f"{status} | {msg}")
-                    save_to_csv(user_data, status, msg)
-                    if status == "SUCCESS":
-                        send_email(user_data, status, msg)
-                    break
-                else:
-                    log_info(username, "No valid dates in range. Retrying...")
-                    save_to_csv(user_data, "FAIL", "No valid dates in range")
-
-                retry_wait_time = random.randint(retry_time_l_bound, retry_time_u_bound)
-                log_info(username, f"Retry after {retry_wait_time}s")
-                time.sleep(retry_wait_time)
-
-            except Exception as e:
-                dump_debug(driver, prefix=username)
-                log_info(username, f"Exception: {e}\n{traceback.format_exc()}")
-                save_to_csv(user_data, "EXCEPTION", str(e))
-                # break OR continue? existing behavior: break
-                break
-
-    finally:
-        try:
-            if driver:
-                try:
-                    driver.get(SIGN_OUT_LINK)
-                except Exception:
-                    pass
-                driver.quit()
-        except Exception:
-            pass
-        log_info(username, "Session finished.")
-
-# ===================== FLASK ROUTES =====================
-@app.route('/')
-def serve_index():
-    # Keep a simple index; ensure templates/index.html exists OR just return text
-    try:
-        return render_template('index.html')
-    except Exception:
-        return "OK", 200
-
-@app.route('/submit', methods=['POST', 'OPTIONS'])
-@cross_origin()
-def submit():
-    if request.method == 'OPTIONS':
-        return '', 200
-
-    data = request.json or {}
-    num_students = int(data.get("num_students", 1))
-    students = data.get("students", [])
-
-    if len(students) != num_students:
-        return jsonify({"error": "Invalid number of students provided"}), 400
-
-    # Non-blocking: daemon threads; return immediately
-    for student in students:
-        t = threading.Thread(target=process_user, args=(student,), daemon=True)
-        t.start()
-        time.sleep(2)  # slight stagger to avoid simultaneous login
-
-    return jsonify({"message": "Processing started", "count": len(students)}), 202
-
-# ===================== MAIN =====================
+# -------------------- MAIN LOOP --------------------
+# -------------------- MAIN LOOP --------------------
 if __name__ == "__main__":
-    # DEV only. In prod use gunicorn.
-    app.run(host="0.0.0.0", port=5000)
+    first_loop = True
+    while True:
+        LOG_FILE_NAME = "log_" + str(datetime.now().date()) + ".txt"
+        if first_loop:
+            t0 = time.time()
+            total_time = 0
+            Req_count = 0
+            start_process()
+            first_loop = False
+
+        Req_count += 1
+        try:
+            msg = "-" * 60 + f"\nRequest count: {Req_count}, Log time: {datetime.today()}\n"
+            print(msg)
+            info_logger(LOG_FILE_NAME, msg)
+
+            dates = get_date()
+            if not dates:
+                msg = f"No available dates! Sleeping {RETRY_TIME_L_BOUND}-{RETRY_TIME_U_BOUND} seconds before retry..."
+                print(msg)
+                info_logger(LOG_FILE_NAME, msg)
+                time.sleep(random.randint(RETRY_TIME_L_BOUND, RETRY_TIME_U_BOUND))
+                continue
+
+            # Log all available dates
+            all_dates_str = ", ".join([d.get('date') for d in dates])
+            msg = "All available dates:\n" + all_dates_str
+            print(msg)
+            info_logger(LOG_FILE_NAME, msg)
+
+            # Check if any date is in our period
+            date_in_period = get_available_date(dates)
+            if date_in_period:
+                END_MSG_TITLE, msg = reschedule(date_in_period)
+                print(msg)
+                info_logger(LOG_FILE_NAME, msg)
+                send_notification(END_MSG_TITLE, msg)
+                break  # stop if successful
+            else:
+                print(f"No available dates in your period ({PRIOD_START} - {PRIOD_END}), retrying...")
+                info_logger(LOG_FILE_NAME, f"No dates in target period ({PRIOD_START} - {PRIOD_END})")
+
+            # Retry wait
+            RETRY_WAIT_TIME = random.randint(RETRY_TIME_L_BOUND, RETRY_TIME_U_BOUND)
+            time.sleep(RETRY_WAIT_TIME)
+
+        except Exception as e:
+            msg = f"Exception occurred: {e}"
+            print(msg)
+            info_logger(LOG_FILE_NAME, msg)
+            send_notification("EXCEPTION", msg)
+            time.sleep(RETRY_TIME_U_BOUND)
+            continue
+
+
+    driver.get(SIGN_OUT_LINK)
+    driver.stop_client()
+    driver.quit()
