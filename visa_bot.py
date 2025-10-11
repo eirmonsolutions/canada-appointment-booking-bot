@@ -14,6 +14,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+from selenium.webdriver.chrome.options import Options
 
 from embassy import *
 
@@ -62,6 +63,8 @@ DATE_URL = f"https://ais.usvisa-info.com/{EMBASSY}/niv/schedule/{SCHEDULE_ID}/ap
 TIME_URL = f"https://ais.usvisa-info.com/{EMBASSY}/niv/schedule/{SCHEDULE_ID}/appointment/times/{FACILITY_ID}.json?date=%s&appointments[expedite]=false"
 SIGN_OUT_LINK = f"https://ais.usvisa-info.com/{EMBASSY}/niv/users/sign_out"
 
+
+
 JS_SCRIPT = ("var req = new XMLHttpRequest();"
              f"req.open('GET', '%s', false);"
              "req.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');"
@@ -71,6 +74,20 @@ JS_SCRIPT = ("var req = new XMLHttpRequest();"
              "return req.responseText;")
 
 # -------------------- FUNCTIONS --------------------
+
+
+
+chrome_options = Options()
+chrome_options.add_argument("--headless")  # Run Chrome in headless mode
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--disable-extensions")
+chrome_options.add_argument("--remote-allow-origins=*")
+chrome_options.add_argument(f"--user-data-dir=/tmp/selenium_{random.randint(1000,9999)}")  # unique temp profile
+
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+
 
 def send_notification(title, msg):
     print(f"Sending notification: {title}")
