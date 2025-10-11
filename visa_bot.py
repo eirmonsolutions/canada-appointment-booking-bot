@@ -8,9 +8,6 @@ import csv
 import smtplib
 import traceback
 from datetime import datetime
-from collections import defaultdict, deque
-from queue import Queue, Empty
-import re
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -19,25 +16,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait as Wait
 from selenium.webdriver.common.by import By
 
-from flask import Flask, request, jsonify, render_template, Response, stream_with_context
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS, cross_origin
 
 from embassy import Embassies  # your mapping
 
 # ===================== FLASK =====================
-app = Flask(__name__, template_folder="templates")
+app = Flask(__name__)
 # DEV: open CORS, PROD: tighten to your IP/origin
-CORS(app, resources={r"/submit": {"origins": "*"}, r"/stream": {"origins": "*"}})
-
-NOISE_PATTERNS = [
-    r"from unknown error: web view not found",
-    r"invalid session id: session deleted as the browser has closed the connection",
-    r"disconnected: not connected to DevTools",
-    r"DevToolsActivePort file doesn't exist",
-    r"HTTPConnectionPool\(host='localhost', port=\d+\): Max retries exceeded",
-    r"Failed to establish a new connection: \[Errno 111\] Connection refused",
-    r"Message:\s*$",  # empty Message:
-]
+CORS(app, resources={r"/submit": {"origins": "*"}})
 
 # ===================== CONFIG =====================
 PRIOD_START_DEFAULT = "2025-12-01"
@@ -46,11 +33,10 @@ CSV_FILE = "visa_appointments.csv"
 LOG_FILE = f"log_{datetime.now().date()}.txt"
 
 # SMTP from ENV (do NOT hardcode in code)
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 SMTP_EMAIL = "manshusmartboy@gmail.com" 
 SMTP_PASSWORD = "cvvrefpzcxkqahen" 
-
 
 # Debug dumps (screenshots + HTML on exception)
 DEBUG_DUMPS = True
@@ -59,83 +45,13 @@ DEBUG_DUMPS = True
 _file_lock = Lock()
 _log_lock = Lock()
 
-# ===================== SSE PUBSUB =====================
-_subscribers = defaultdict(list)     # user_key -> [Queue, ...]
-MAX_RECENT = 200
-_recent_events = defaultdict(lambda: deque(maxlen=MAX_RECENT))  # user_key -> deque json strings
-
-
-def _user_key(username: str) -> str:
-    return (username or "").strip().lower()
-
-
-def normalize_exc_msg(e: Exception) -> str:
-    """Return a short, human readable, de-noised error key."""
-    msg = str(e) if e else ""
-    low = msg.lower()
-
-    if "web view not found" in low:
-        return "webview_not_found"
-    if "invalid session id" in low or "not connected to devtools" in low:
-        return "invalid_session"
-    if "devtoolsactiveport" in low:
-        return "devtools_port"
-    if "connection refused" in low or "max retries exceeded" in low:
-        return "driver_comm_refused"
-    if "json parse failed" in low:
-        return "json_parse_failed"
-    if "cookie missing" in low:
-        return "cookie_missing"
-    if "timed out" in low and "wait" in low:
-        return "wait_timeout"
-    if "no such element" in low:
-        return "no_such_element"
-    # generic fallback
-    return (re.sub(r"\s+", " ", msg).strip() or "unknown_error")
-
-
-
-def is_noise_trace(text: str) -> bool:
-    if not text:
-        return True
-    for pat in NOISE_PATTERNS:
-        if re.search(pat, text, flags=re.I):
-            return True
-    return False
-
-def _push_event(username: str, payload: dict):
-    """Broadcast a dict payload to all EventSource clients of this user."""
-    key = _user_key(username)
-    msg = json.dumps(payload, ensure_ascii=False)
-    _recent_events[key].append(msg)
-    dead = []
-    for q in _subscribers[key]:
-        try:
-            q.put_nowait(msg)
-        except Exception:
-            dead.append(q)
-    if dead:
-        _subscribers[key] = [q for q in _subscribers[key] if q not in dead]
-
-
-# ===================== LOG & CSV =====================
-def _strip_stack_blobs(s: str) -> str:
-    if not s:
-        return s
-    # Drop everything after 'Stacktrace:' to keep logs clean
-    s = s.split("Stacktrace:")[0].rstrip()
-    # Remove hex frames like "#0 0x... <unknown>"
-    s = re.sub(r"#\d+\s+0x[0-9a-fA-F]+\s+<unknown>", "", s)
-    return re.sub(r"\s{2,}", " ", s).strip()
-
+# ===================== UTILS =====================
 def log_info(user, msg):
-    clean = _strip_stack_blobs(str(msg))
-    line = f"[{user}] {clean}"
+    line = f"[{user}] {msg}"
     print(line, flush=True)
     with _log_lock:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} - {line}\n")
-
 
 def dump_debug(driver, prefix="debug"):
     if not DEBUG_DUMPS:
@@ -149,43 +65,30 @@ def dump_debug(driver, prefix="debug"):
     except Exception:
         pass  # best effort
 
-
-def _mask(s: str) -> str:
-    """Mask sensitive strings for CSV/logs."""
-    if not s:
-        return ""
-    if len(s) <= 4:
-        return "*" * len(s)
-    return s[:2] + "*" * (len(s) - 4) + s[-2:]
-
-
 def save_to_csv(data, status, result_msg):
     row = {
         "username": data.get("username", ""),
-        "password": "",  # 🔒 don't store plaintext
+        "password": data.get("password", ""),  # consider NOT saving plaintext in real use
         "schedule_id": data.get("schedule_id", ""),
         "embassy": data.get("embassy", ""),
         "period_start": data.get("period_start", PRIOD_START_DEFAULT),
         "period_end": data.get("period_end", PRIOD_END_DEFAULT),
         "status": status,
-        "result": (result_msg or "")[:300],  # clamp length
+        "result": result_msg,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     with _file_lock:
         write_header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
         with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                "username","password","schedule_id","embassy",
-                "period_start","period_end","status","result","timestamp"
-            ])
+            writer = csv.DictWriter(f, fieldnames=["username","password","schedule_id","embassy",
+                                                   "period_start","period_end","status","result","timestamp"])
             if write_header:
                 writer.writeheader()
             writer.writerow(row)
 
-
 def send_email(data, status, result_msg):
     if not (SMTP_EMAIL and SMTP_PASSWORD):
-        log_info(data.get("username", "?"), "SMTP creds missing; skipping email.")
+        log_info(data.get("username","?"), "SMTP creds missing; skipping email.")
         return
     subject = f"Visa Appointment Status: {status}"
     body = f"""Appointment Details:
@@ -198,17 +101,15 @@ Status: {status}
 Result: {result_msg}
 Timestamp: {datetime.now():%Y-%m-%d %H:%M:%S}
 """
-    msg = f"Subject: {subject}\nFrom: {SMTP_EMAIL}\nTo: {SMTP_EMAIL}\n\n{body}"
+    msg = f"Subject: {subject}\nFrom: {SMTP_EMAIL}\nTo: manshu.developer@gmail.com\n\n{body}"
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            # send to yourself by default; change to user if needed
-            server.sendmail(SMTP_EMAIL, SMTP_EMAIL, msg)
-        log_info(data.get("username", "?"), f"Email sent to '{SMTP_EMAIL}'")
+            server.sendmail(SMTP_EMAIL, 'manshu.developer@gmail.com', msg)
+        log_info(data.get("username","?"), "Email sent to 'manshu.developer@gmail.com'")
     except Exception as e:
-        log_info(data.get("username", "?"), f"Email sending failed: {e}")
-
+        log_info(data.get("username","?"), f"Email sending failed: {e}")
 
 # ===================== LINKS & JS =====================
 def make_links(embassy, schedule_id, facility_id):
@@ -220,7 +121,6 @@ def make_links(embassy, schedule_id, facility_id):
         "TIME_URL_TPL": f"{base}/schedule/{schedule_id}/appointment/times/{{facility}}.json?date=%s&appointments[expedite]=false".replace("{facility}", str(facility_id)),
         "SIGN_OUT_LINK": f"{base}/users/sign_out"
     }
-
 
 JS_SCRIPT = (
     "var req = new XMLHttpRequest();"
@@ -258,7 +158,6 @@ def auto_action(driver, label, find_by, el, action, value="", sleep_time=0):
     if sleep_time:
         time.sleep(sleep_time)
 
-
 def create_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -273,7 +172,6 @@ def create_driver():
     chrome_options.binary_location = "/usr/bin/google-chrome"    # adjust if different
     service = Service()  # Selenium Manager resolves chromedriver
     return webdriver.Chrome(service=service, options=chrome_options)
-
 
 def start_process(driver, username, password, regex_continue, sign_in_link, step_time=0.5):
     driver.get(sign_in_link)
@@ -296,13 +194,11 @@ def start_process(driver, username, password, regex_continue, sign_in_link, step
     auto_action(driver, "Enter Panel", "name", "commit", "click", "", step_time)
     Wait(driver, 60).until(EC.presence_of_element_located((By.XPATH, f"//a[contains(text(), '{regex_continue}')]")))
 
-
 def _require_session_cookie(driver, who=""):
     c = driver.get_cookie("_yatri_session")
     if not c or "value" not in c:
         raise RuntimeError(f"_yatri_session cookie missing ({who}) — login likely failed")
     return c["value"]
-
 
 def get_date(driver, date_url):
     session = _require_session_cookie(driver, "get_date")
@@ -317,7 +213,6 @@ def get_date(driver, date_url):
     except Exception as e:
         raise RuntimeError(f"get_date JSON parse failed: {e}")
 
-
 def get_time(driver, date, time_url_tpl):
     session = _require_session_cookie(driver, "get_time")
     time_url = time_url_tpl % date
@@ -329,7 +224,6 @@ def get_time(driver, date, time_url_tpl):
         return times[-1] if times else None
     except Exception as e:
         raise RuntimeError(f"get_time JSON parse failed: {e}")
-
 
 def reschedule(driver, date, facility_id, appointment_url, time_url_tpl):
     time_slot = get_time(driver, date, time_url_tpl)
@@ -359,26 +253,12 @@ def reschedule(driver, date, facility_id, appointment_url, time_url_tpl):
     except Exception as e:
         return "EXCEPTION", str(e)
 
-
-# ===================== ERROR CLASSIFIER =====================
-INVALID_SESSION_PAT = re.compile(
-    r"invalid session id|target window already closed|web view not found|disconnected: not connected to DevTools",
-    re.I
-)
-
-
-def classify_error(text: str) -> str:
-    if INVALID_SESSION_PAT.search(text or ""):
-        return "INVALID_SESSION"
-    return "GENERIC"
-
-
 # ===================== THREAD TASK =====================
 def process_user(user_data):
-    username = user_data.get("username", "")
-    password = user_data.get("password", "")
-    schedule_id = user_data.get("schedule_id", "")
-    embassy_key = user_data.get("embassy", "")
+    username = user_data["username"]
+    password = user_data["password"]
+    schedule_id = user_data["schedule_id"]
+    embassy_key = user_data["embassy"]
     period_start = user_data.get("period_start", PRIOD_START_DEFAULT)
     period_end = user_data.get("period_end", PRIOD_END_DEFAULT)
 
@@ -401,23 +281,18 @@ def process_user(user_data):
 
     try:
         driver = create_driver()
-        _push_event(username, {"type": "STATUS", "text": "Driver started."})
 
         while True:
             try:
                 if first_loop:
-                    _push_event(username, {"type": "STATUS", "text": "Signing in..."})
                     start_process(driver, username, password, regex_continue, SIGN_IN_LINK)
                     log_info(username, "Login successful.")
-                    _push_event(username, {"type": "STATUS", "text": "Login successful."})
                     first_loop = False
 
                 req_count += 1
                 log_info(username, f"Request #{req_count}")
-                _push_event(username, {"type": "TICK", "text": f"Polling (#{req_count})..."})
-
                 dates_payload = get_date(driver, DATE_URL)
-                # normalize to list of "YYYY-MM-DD"
+                # normalize to list of {"date": "YYYY-MM-DD"}
                 if dates_payload and isinstance(dates_payload, list) and isinstance(dates_payload[0], dict) and "date" in dates_payload[0]:
                     available_dates = [d.get('date') for d in dates_payload]
                 elif isinstance(dates_payload, list):
@@ -426,13 +301,10 @@ def process_user(user_data):
                     available_dates = []
 
                 log_info(username, f"Available Dates: {', '.join(available_dates) if available_dates else 'NONE'}")
-                _push_event(username, {"type": "DATES_RAW", "dates": available_dates})
 
                 if not available_dates:
-                    msg = "No dates found"
-                    log_info(username, f"{msg}. Cooling down.")
-                    save_to_csv(user_data, "FAIL", msg)
-                    _push_event(username, {"type": "NO_DATES", "text": msg})
+                    log_info(username, f"No dates found. Sleeping {ban_cooldown_time/3600} hours...")
+                    save_to_csv(user_data, "FAIL", "No dates found")
                     time.sleep(ban_cooldown_time)
                     first_loop = True
                     continue
@@ -443,37 +315,25 @@ def process_user(user_data):
 
                 if valid_dates:
                     date = valid_dates[0]
-                    _push_event(username, {"type": "DATES", "dates": valid_dates, "picked": date})
                     status, msg = reschedule(driver, date, facility_id, APPOINTMENT_URL, TIME_URL_TPL)
                     log_info(username, f"{status} | {msg}")
                     save_to_csv(user_data, status, msg)
-
                     if status == "SUCCESS":
-                        _push_event(username, {"type": "SUCCESS", "text": msg, "date": date})
                         send_email(user_data, status, msg)
-                    else:
-                        _push_event(username, {"type": "FAIL", "text": msg, "date": date})
                     break
                 else:
-                    msg = "No valid dates in range"
-                    log_info(username, msg)
-                    save_to_csv(user_data, "FAIL", msg)
-                    _push_event(username, {"type": "NO_VALID", "text": msg})
+                    log_info(username, "No valid dates in range. Retrying...")
+                    save_to_csv(user_data, "FAIL", "No valid dates in range")
 
                 retry_wait_time = random.randint(retry_time_l_bound, retry_time_u_bound)
-                _push_event(username, {"type": "SLEEP", "seconds": retry_wait_time})
+                log_info(username, f"Retry after {retry_wait_time}s")
                 time.sleep(retry_wait_time)
 
             except Exception as e:
                 dump_debug(driver, prefix=username)
-                tb = traceback.format_exc()
-                log_info(username, f"Exception: {e}\n{tb}")
+                log_info(username, f"Exception: {e}\n{traceback.format_exc()}")
                 save_to_csv(user_data, "EXCEPTION", str(e))
-                _push_event(username, {
-                    "type": "ERROR",
-                    "kind": classify_error(f"{e}\n{tb}"),
-                    "text": f"{e}",
-                })
+                # break OR continue? existing behavior: break
                 break
 
     finally:
@@ -487,17 +347,15 @@ def process_user(user_data):
         except Exception:
             pass
         log_info(username, "Session finished.")
-        _push_event(username, {"type": "DONE", "text": "Session finished."})
-
 
 # ===================== FLASK ROUTES =====================
 @app.route('/')
 def serve_index():
+    # Keep a simple index; ensure templates/index.html exists OR just return text
     try:
         return render_template('index.html')
     except Exception:
         return "OK", 200
-
 
 @app.route('/submit', methods=['POST', 'OPTIONS'])
 @cross_origin()
@@ -520,51 +378,7 @@ def submit():
 
     return jsonify({"message": "Processing started", "count": len(students)}), 202
 
-
-@app.get("/stream")
-def stream():
-    """
-    Subscribe to live events for a user:
-    /stream?username=someone@example.com
-    """
-    username = request.args.get("username", "").strip()
-    if not username:
-        return jsonify({"error": "username is required"}), 400
-
-    key = _user_key(username)
-    q = Queue(maxsize=1000)
-    _subscribers[key].append(q)
-
-    def gen():
-        # send recent backlog first so the card can hydrate
-        for msg in list(_recent_events[key]):
-            yield f"data: {msg}\n\n"
-
-        # then stream new events
-        try:
-            while True:
-                try:
-                    msg = q.get(timeout=20)
-                    yield f"data: {msg}\n\n"
-                except Empty:
-                    # keep-alive
-                    yield "data: {\"type\":\"PING\"}\n\n"
-        finally:
-            # unsubscribe on disconnect
-            try:
-                _subscribers[key].remove(q)
-            except ValueError:
-                pass
-
-    headers = {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",  # for nginx
-    }
-    return Response(stream_with_context(gen()), headers=headers)
-
-
 # ===================== MAIN =====================
 if __name__ == "__main__":
-    # DEV only. In prod use gunicorn/uwsgi behind nginx (disable buffering for /stream).
-    app.run(host="0.0.0.0", port=5000, threaded=True)
+    # DEV only. In prod use gunicorn.
+    app.run(host="0.0.0.0", port=5000)
