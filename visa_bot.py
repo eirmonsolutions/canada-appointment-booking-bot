@@ -20,6 +20,8 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS, cross_origin
 
 from embassy import Embassies  # your mapping
+from queue import Queue, Empty
+import logging
 
 # ===================== FLASK =====================
 app = Flask(__name__)
@@ -46,12 +48,42 @@ _file_lock = Lock()
 _log_lock = Lock()
 
 # ===================== UTILS =====================
+_listeners = set()
+_listeners_lock = Lock()
+
+def _register_listener():
+    q = Queue()
+    with _listeners_lock:
+        _listeners.add(q)
+    return q
+
+def _remove_listener(q):
+    with _listeners_lock:
+        _listeners.discard(q)
+
+def _broadcast(msg: str):
+    with _listeners_lock:
+        dead = []
+        for q in list(_listeners):
+            try:
+                q.put_nowait(msg)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            _listeners.discard(q)
+# ------------------------------------
+
+# ---- UPDATE log_info (broadcast + file; print optional) ----
 def log_info(user, msg):
     line = f"[{user}] {msg}"
-    print(line, flush=True)
+    # (optional) print(line, flush=True)  # agar terminal me bhi dekhna ho to rehne do
     with _log_lock:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} - {line}\n")
+    _broadcast(line)  # <- yahi magic
+# ------------------------------------------------------------
+
+
 
 def dump_debug(driver, prefix="debug"):
     if not DEBUG_DUMPS:
@@ -379,6 +411,7 @@ def reschedule(driver, date, facility_id, appointment_url, time_url_tpl):
         return "EXCEPTION", str(e)
 
 # ===================== THREAD TASK =====================
+
 def process_user(user_data):
     username = user_data["username"]
     password = user_data["password"]
@@ -474,6 +507,9 @@ def process_user(user_data):
         log_info(username, "Session finished.")
 
 # ===================== FLASK ROUTES =====================
+
+
+
 @app.route('/')
 def serve_index():
     # Keep a simple index; ensure templates/index.html exists OR just return text
@@ -503,6 +539,31 @@ def submit():
 
     return jsonify({"message": "Processing started", "count": len(students)}), 202
 
+@app.route("/logs/stream")
+@cross_origin()
+def stream_logs():
+    q = _register_listener()
+
+    def gen():
+        # initial hello so client turant open ho jaye
+        yield "event: hello\ndata: connected\n\n"
+        try:
+            while True:
+                try:
+                    msg = q.get(timeout=15)  # 15s me agar kuch na aaya to heartbeat
+                    yield f"data: {msg}\n\n"
+                except Empty:
+                    # heartbeat to keep connection alive (important behind proxies)
+                    yield ": ping\n\n"
+        except GeneratorExit:
+            _remove_listener(q)
+
+    # SSE headers
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no"  # nginx buffering ko disable hint
+    }
+    return Response(gen(), mimetype="text/event-stream", headers=headers)
 # ===================== MAIN =====================
 if __name__ == "__main__":
     # DEV only. In prod use gunicorn.

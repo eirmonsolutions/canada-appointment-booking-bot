@@ -34,6 +34,15 @@
       </button>
       <p id="message" class="mt-4 hidden text-lg font-medium"></p>
     </div>
+
+
+    <div class="mt-8">
+  <h3 class="text-lg font-semibold text-gray-800 mb-2">Live Logs</h3>
+  <pre id="liveLog"
+       class="h-64 overflow-auto bg-black text-green-400 p-4 rounded-lg text-sm leading-5 border border-gray-700"></pre>
+</div>
+
+
   </div>
 
   <script>
@@ -147,5 +156,40 @@
     // Initialize with one student form
     generateStudentForms(1);
   </script>
+
+
+<script>
+
+  const MAX_LINES = 1000;
+  const liveLog = document.getElementById('liveLog');
+
+  function startLogStream(){
+    const es = new EventSource('/logs/stream');
+
+    es.addEventListener('hello', () => {
+      liveLog.textContent += '[system] log stream connected\n';
+      liveLog.scrollTop = liveLog.scrollHeight;
+    });
+
+    es.onmessage = (e) => {
+      // each log line
+      liveLog.textContent += e.data + '\n';
+      liveLog.scrollTop = liveLog.scrollHeight;
+    };
+
+    es.onerror = () => {
+      liveLog.textContent += '[system] stream error, retrying in 3s...\n';
+      liveLog.scrollTop = liveLog.scrollHeight;
+      es.close();
+      setTimeout(startLogStream, 3000); // auto-reconnect
+    };
+  }
+
+  // start on load
+  startLogStream();
+</script>
+
+
+
 </body>
 </html>
