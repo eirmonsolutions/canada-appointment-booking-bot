@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>US Visa Bot – Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Nice scroll for logs */
+    .scroll-soft::-webkit-scrollbar { width: 10px; }
+    .scroll-soft::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 6px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <!-- Header -->
+    <header class="mb-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">US Visa Appointment Bot – Control Panel</h1>
+        <div class="flex items-center gap-2">
+          <span id="statusDot" class="inline-block h-2.5 w-2.5 rounded-full bg-gray-300"></span>
+          <span id="statusText" class="text-sm text-gray-600">Idle</span>
+        </div>
+      </div>
+      <p class="text-sm text-gray-500 mt-1">Manage config, run the bot, and watch logs in real-time.</p>
+    </header>
+
+    <!-- Tabs -->
+    <div class="mb-4 flex flex-wrap gap-2">
+      <button data-tab="tab-settings" class="tab-btn px-3 py-2 rounded-lg bg-white shadow text-sm font-medium border border-gray-200">Settings</button>
+      <button data-tab="tab-notify" class="tab-btn px-3 py-2 rounded-lg bg-white shadow text-sm font-medium border border-gray-200">Notifications</button>
+      <button data-tab="tab-time" class="tab-btn px-3 py-2 rounded-lg bg-white shadow text-sm font-medium border border-gray-200">Timing</button>
+      <button data-tab="tab-chrome" class="tab-btn px-3 py-2 rounded-lg bg-white shadow text-sm font-medium border border-gray-200">Chrome Driver</button>
+      <button data-tab="tab-actions" class="tab-btn px-3 py-2 rounded-lg bg-white shadow text-sm font-medium border border-gray-200">Actions</button>
+      <button data-tab="tab-logs" class="tab-btn px-3 py-2 rounded-lg bg-white shadow text-sm font-medium border border-gray-200">Logs</button>
+    </div>
+
+    <!-- Panels -->
+    <section id="tab-settings" class="tab-panel bg-white rounded-xl border border-gray-200 shadow p-5">
+      <h2 class="text-lg font-semibold mb-4">Settings (config.ini → [PERSONAL_INFO])</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium">USERNAME (email)</label>
+          <input id="USERNAME" class="mt-1 w-full rounded-lg border-gray-300" placeholder="your@email.com">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">PASSWORD</label>
+          <input id="PASSWORD" type="password" class="mt-1 w-full rounded-lg border-gray-300" placeholder="••••••••">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">SCHEDULE_ID</label>
+          <input id="SCHEDULE_ID" class="mt-1 w-full rounded-lg border-gray-300" placeholder="e.g. 12345678">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium">PRIOD_START (YYYY-MM-DD)</label>
+            <input id="PRIOD_START" type="date" class="mt-1 w-full rounded-lg border-gray-300">
+          </div>
+          <div>
+            <label class="block text-sm font-medium">PRIOD_END (YYYY-MM-DD)</label>
+            <input id="PRIOD_END" type="date" class="mt-1 w-full rounded-lg border-gray-300">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium">YOUR_EMBASSY (key in your Embassies dict)</label>
+          <input id="YOUR_EMBASSY" class="mt-1 w-full rounded-lg border-gray-300" placeholder="e.g. 'india_english'">
+          <p class="text-xs text-gray-500 mt-1">Your Python loads EMBASSY/FACILITY_ID/REGEX_CONTINUE from <code>Embassies[YOUR_EMBASSY]</code>.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium">FACILITY_ID (optional override)</label>
+          <input id="FACILITY_ID" class="mt-1 w-full rounded-lg border-gray-300" placeholder="Leave blank to use mapping">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium">REGEX_CONTINUE text (optional override)</label>
+          <input id="REGEX_CONTINUE" class="mt-1 w-full rounded-lg border-gray-300" placeholder="e.g. 'Continue' or 'Continue >'">
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-notify" class="tab-panel hidden bg-white rounded-xl border border-gray-200 shadow p-5">
+      <h2 class="text-lg font-semibold mb-4">Notifications (config.ini → [NOTIFICATION])</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium">SENDGRID_API_KEY</label>
+          <input id="SENDGRID_API_KEY" class="mt-1 w-full rounded-lg border-gray-300" placeholder="SG.xxxxx">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">PUSHOVER_TOKEN</label>
+          <input id="PUSHOVER_TOKEN" class="mt-1 w-full rounded-lg border-gray-300">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">PUSHOVER_USER</label>
+          <input id="PUSHOVER_USER" class="mt-1 w-full rounded-lg border-gray-300">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">PERSONAL_SITE_USER</label>
+          <input id="PERSONAL_SITE_USER" class="mt-1 w-full rounded-lg border-gray-300">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">PERSONAL_SITE_PASS</label>
+          <input id="PERSONAL_SITE_PASS" class="mt-1 w-full rounded-lg border-gray-300">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">PUSH_TARGET_EMAIL</label>
+          <input id="PUSH_TARGET_EMAIL" class="mt-1 w-full rounded-lg border-gray-300">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium">PERSONAL_PUSHER_URL</label>
+          <input id="PERSONAL_PUSHER_URL" class="mt-1 w-full rounded-lg border-gray-300" placeholder="https://yourdomain.com/notify">
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-time" class="tab-panel hidden bg-white rounded-xl border border-gray-200 shadow p-5">
+      <h2 class="text-lg font-semibold mb-4">Timing (config.ini → [TIME])</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium">RETRY_TIME_L_BOUND (seconds)</label>
+          <input id="RETRY_TIME_L_BOUND" type="number" class="mt-1 w-full rounded-lg border-gray-300" placeholder="5">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">RETRY_TIME_U_BOUND (seconds)</label>
+          <input id="RETRY_TIME_U_BOUND" type="number" class="mt-1 w-full rounded-lg border-gray-300" placeholder="10">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">WORK_LIMIT_TIME (hours)</label>
+          <input id="WORK_LIMIT_TIME" type="number" step="0.1" class="mt-1 w-full rounded-lg border-gray-300" placeholder="8">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">WORK_COOLDOWN_TIME (hours)</label>
+          <input id="WORK_COOLDOWN_TIME" type="number" step="0.1" class="mt-1 w-full rounded-lg border-gray-300" placeholder="1">
+        </div>
+        <div>
+          <label class="block text-sm font-medium">BAN_COOLDOWN_TIME (hours)</label>
+          <input id="BAN_COOLDOWN_TIME" type="number" step="0.1" class="mt-1 w-full rounded-lg border-gray-300" placeholder="24">
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-chrome" class="tab-panel hidden bg-white rounded-xl border border-gray-200 shadow p-5">
+      <h2 class="text-lg font-semibold mb-4">Chrome Driver (config.ini → [CHROMEDRIVER])</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex items-center gap-3">
+          <input id="LOCAL_USE" type="checkbox" class="h-4 w-4 rounded border-gray-300">
+          <label class="text-sm font-medium">LOCAL_USE (tick to use local ChromeDriver)</label>
+        </div>
+        <div>
+          <label class="block text-sm font-medium">HUB_ADDRESS (for Remote WebDriver)</label>
+          <input id="HUB_ADDRESS" class="mt-1 w-full rounded-lg border-gray-300" placeholder="http://localhost:4444/wd/hub">
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-actions" class="tab-panel hidden bg-white rounded-xl border border-gray-200 shadow p-5">
+      <h2 class="text-lg font-semibold mb-4">Actions</h2>
+      <div class="flex flex-wrap gap-3 mb-4">
+        <button id="btnSaveLocal" class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">Save to Browser</button>
+        <button id="btnLoadLocal" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-900 border border-gray-300 text-sm font-semibold">Load from Browser</button>
+        <button id="btnExportIni" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold">Export config.ini</button>
+        <label class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm font-semibold cursor-pointer">
+          Import config.ini
+          <input id="iniFileInput" type="file" accept=".ini,text/plain" class="hidden">
+        </label>
+      </div>
+
+      <div class="rounded-xl border border-gray-200 p-4 bg-gradient-to-br from-gray-50 to-white">
+        <h3 class="font-semibold mb-2">Bot Control (optional REST hooks)</h3>
+        <p class="text-sm text-gray-600 mb-3">
+          These call <code>/api/start</code> and <code>/api/stop</code> with JSON body = current config. Wire these in Flask if you want to manage the process.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <button id="btnStart" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold">Start Bot</button>
+          <button id="btnStop" class="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold">Stop Bot</button>
+        </div>
+        <p id="actionMsg" class="text-sm mt-3 text-gray-700"></p>
+      </div>
+    </section>
+
+    <section id="tab-logs" class="tab-panel hidden bg-white rounded-xl border border-gray-200 shadow p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Logs</h2>
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-2 text-sm">
+            <input id="autoScroll" type="checkbox" class="h-4 w-4 rounded border-gray-300" checked>
+            Auto-scroll
+          </label>
+          <button id="btnClearLog" class="px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-sm">Clear</button>
+          <button id="btnPollToggle" class="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm">Start Polling</button>
+          <label class="px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-sm cursor-pointer">
+            Open local log file
+            <input id="logFileInput" type="file" accept=".txt" class="hidden">
+          </label>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mb-2">Server endpoint expected: <code>GET /api/logs</code> (returns plain text or NDJSON). Polls every 3s.</p>
+      <div id="logArea" class="h-80 md:h-[28rem] overflow-auto bg-black text-green-200 font-mono text-xs p-3 rounded-lg scroll-soft whitespace-pre-wrap"></div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-xs text-gray-500">
+      <p>Tip: Your Python script reads from <code>config.ini</code>. Use “Export config.ini” then place it alongside your bot.</p>
+    </footer>
+  </div>
+
+  <script>
+    // ----- Tabs -----
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+    function activateTab(id) {
+      tabPanels.forEach(p => p.classList.toggle('hidden', p.id !== id));
+      tabBtns.forEach(b => {
+        const on = b.dataset.tab === id;
+        b.classList.toggle('bg-gray-900', on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('border-gray-900', on);
+      });
+    }
+    activateTab('tab-settings');
+    tabBtns.forEach(b => b.addEventListener('click', () => activateTab(b.dataset.tab)));
+
+    // ----- Form helpers -----
+    const fields = [
+      // PERSONAL_INFO
+      "USERNAME","PASSWORD","SCHEDULE_ID","PRIOD_START","PRIOD_END","YOUR_EMBASSY","FACILITY_ID","REGEX_CONTINUE",
+      // NOTIFICATION
+      "SENDGRID_API_KEY","PUSHOVER_TOKEN","PUSHOVER_USER","PERSONAL_SITE_USER","PERSONAL_SITE_PASS","PUSH_TARGET_EMAIL","PERSONAL_PUSHER_URL",
+      // TIME
+      "RETRY_TIME_L_BOUND","RETRY_TIME_U_BOUND","WORK_LIMIT_TIME","WORK_COOLDOWN_TIME","BAN_COOLDOWN_TIME",
+      // CHROMEDRIVER
+      "LOCAL_USE","HUB_ADDRESS"
+    ];
+
+    function getConfigObj() {
+      const obj = {
+        PERSONAL_INFO: {
+          USERNAME: val("USERNAME"),
+          PASSWORD: val("PASSWORD"),
+          SCHEDULE_ID: val("SCHEDULE_ID"),
+          PRIOD_START: val("PRIOD_START"),
+          PRIOD_END: val("PRIOD_END"),
+          YOUR_EMBASSY: val("YOUR_EMBASSY"),
+        },
+        NOTIFICATION: {
+          SENDGRID_API_KEY: val("SENDGRID_API_KEY"),
+          PUSHOVER_TOKEN: val("PUSHOVER_TOKEN"),
+          PUSHOVER_USER: val("PUSHOVER_USER"),
+          PERSONAL_SITE_USER: val("PERSONAL_SITE_USER"),
+          PERSONAL_SITE_PASS: val("PERSONAL_SITE_PASS"),
+          PUSH_TARGET_EMAIL: val("PUSH_TARGET_EMAIL"),
+          PERSONAL_PUSHER_URL: val("PERSONAL_PUSHER_URL"),
+        },
+        TIME: {
+          RETRY_TIME_L_BOUND: val("RETRY_TIME_L_BOUND"),
+          RETRY_TIME_U_BOUND: val("RETRY_TIME_U_BOUND"),
+          WORK_LIMIT_TIME: val("WORK_LIMIT_TIME"),
+          WORK_COOLDOWN_TIME: val("WORK_COOLDOWN_TIME"),
+          BAN_COOLDOWN_TIME: val("BAN_COOLDOWN_TIME"),
+        },
+        CHROMEDRIVER: {
+          LOCAL_USE: isChecked("LOCAL_USE") ? "true" : "false",
+          HUB_ADDRESS: val("HUB_ADDRESS"),
+        }
+      };
+
+      // optional overrides that your Python code supports via Embassies mapping
+      if (val("FACILITY_ID")) obj.PERSONAL_INFO.FACILITY_ID = val("FACILITY_ID");
+      if (val("REGEX_CONTINUE")) obj.PERSONAL_INFO.REGEX_CONTINUE = val("REGEX_CONTINUE");
+
+      return obj;
+    }
+
+    function setConfigObj(obj) {
+      // PERSONAL_INFO
+      setVal("USERNAME", obj?.PERSONAL_INFO?.USERNAME);
+      setVal("PASSWORD", obj?.PERSONAL_INFO?.PASSWORD);
+      setVal("SCHEDULE_ID", obj?.PERSONAL_INFO?.SCHEDULE_ID);
+      setVal("PRIOD_START", obj?.PERSONAL_INFO?.PRIOD_START);
+      setVal("PRIOD_END", obj?.PERSONAL_INFO?.PRIOD_END);
+      setVal("YOUR_EMBASSY", obj?.PERSONAL_INFO?.YOUR_EMBASSY);
+      setVal("FACILITY_ID", obj?.PERSONAL_INFO?.FACILITY_ID);
+      setVal("REGEX_CONTINUE", obj?.PERSONAL_INFO?.REGEX_CONTINUE);
+
+      // NOTIFICATION
+      setVal("SENDGRID_API_KEY", obj?.NOTIFICATION?.SENDGRID_API_KEY);
+      setVal("PUSHOVER_TOKEN", obj?.NOTIFICATION?.PUSHOVER_TOKEN);
+      setVal("PUSHOVER_USER", obj?.NOTIFICATION?.PUSHOVER_USER);
+      setVal("PERSONAL_SITE_USER", obj?.NOTIFICATION?.PERSONAL_SITE_USER);
+      setVal("PERSONAL_SITE_PASS", obj?.NOTIFICATION?.PERSONAL_SITE_PASS);
+      setVal("PUSH_TARGET_EMAIL", obj?.NOTIFICATION?.PUSH_TARGET_EMAIL);
+      setVal("PERSONAL_PUSHER_URL", obj?.NOTIFICATION?.PERSONAL_PUSHER_URL);
+
+      // TIME
+      setVal("RETRY_TIME_L_BOUND", obj?.TIME?.RETRY_TIME_L_BOUND);
+      setVal("RETRY_TIME_U_BOUND", obj?.TIME?.RETRY_TIME_U_BOUND);
+      setVal("WORK_LIMIT_TIME", obj?.TIME?.WORK_LIMIT_TIME);
+      setVal("WORK_COOLDOWN_TIME", obj?.TIME?.WORK_COOLDOWN_TIME);
+      setVal("BAN_COOLDOWN_TIME", obj?.TIME?.BAN_COOLDOWN_TIME);
+
+      // CHROMEDRIVER
+      setChecked("LOCAL_USE", (obj?.CHROMEDRIVER?.LOCAL_USE ?? "").toString().toLowerCase() === "true");
+      setVal("HUB_ADDRESS", obj?.CHROMEDRIVER?.HUB_ADDRESS);
+    }
+
+    function generateIni(obj) {
+      const sec = (name, kv) => {
+        const lines = Object.entries(kv)
+          .filter(([,v]) => v !== undefined && v !== null && v !== "")
+          .map(([k,v]) => `${k}=${v}`);
+        return `[${name}]\n${lines.join("\n")}\n\n`;
+      };
+      return (
+        sec("PERSONAL_INFO", obj.PERSONAL_INFO) +
+        sec("NOTIFICATION", obj.NOTIFICATION) +
+        sec("TIME", obj.TIME) +
+        sec("CHROMEDRIVER", obj.CHROMEDRIVER)
+      ).trim() + "\n";
+    }
+
+    function parseIni(text) {
+      const out = {};
+      let current = null;
+      const lines = text.split(/\r?\n/);
+      for (let raw of lines) {
+        const line = raw.trim();
+        if (!line || line.startsWith(";") || line.startsWith("#")) continue;
+        const mHeader = line.match(/^\[(.+?)\]$/);
+        if (mHeader) { current = mHeader[1]; out[current] = out[current] || {}; continue; }
+        const mKV = line.match(/^([^=]+)=(.*)$/);
+        if (mKV && current) {
+          const k = mKV[1].trim(); let v = mKV[2].trim();
+          out[current][k] = v;
+        }
+      }
+      return out;
+    }
+
+    // ----- DOM utils -----
+    const $$ = sel => document.querySelector(sel);
+    const val = id => $$("#" + id)?.value?.trim() ?? "";
+    const setVal = (id, v) => { if ($$("#" + id)) $$("#" + id).value = v ?? ""; };
+    const isChecked = id => $$("#" + id)?.checked ?? false;
+    const setChecked = (id, on) => { if ($$("#" + id)) $$("#" + id).checked = !!on; };
+
+    // ----- Local storage -----
+    const KEY = "visaBotConfig";
+    $$("#btnSaveLocal").addEventListener("click", () => {
+      const obj = getConfigObj();
+      localStorage.setItem(KEY, JSON.stringify(obj));
+      toast("Saved to browser.");
+    });
+    $$("#btnLoadLocal").addEventListener("click", () => {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return toast("Nothing saved yet.", true);
+      setConfigObj(JSON.parse(raw));
+      toast("Loaded from browser.");
+    });
+
+    // ----- Export / Import INI -----
+    $$("#btnExportIni").addEventListener("click", () => {
+      const ini = generateIni(getConfigObj());
+      const blob = new Blob([ini], {type: "text/plain"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "config.ini";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("Exported config.ini");
+    });
+
+    $$("#iniFileInput").addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const obj = parseIni(text);
+      setConfigObj(obj);
+      toast("Imported config.ini");
+    });
+
+    // ----- Start / Stop Bot (optional endpoints) -----
+    const statusDot = $$("#statusDot"), statusText = $$("#statusText");
+    function setStatus(mode) {
+      const colors = { idle:"bg-gray-300", running:"bg-emerald-500", stopped:"bg-rose-500", error:"bg-yellow-400" };
+      statusDot.className = "inline-block h-2.5 w-2.5 rounded-full " + (colors[mode] || colors.idle);
+      statusText.textContent = ({idle:"Idle", running:"Running", stopped:"Stopped", error:"Error"})[mode] || "Idle";
+    }
+    setStatus("idle");
+
+    async function postJSON(url, data) {
+      const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(data)});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json().catch(()=> ({}));
+    }
+
+    $$("#btnStart").addEventListener("click", async () => {
+      try {
+        const conf = getConfigObj();
+        $$("#actionMsg").textContent = "Starting…";
+        setStatus("running");
+        await postJSON("/api/start", conf);
+        $$("#actionMsg").textContent = "Bot started.";
+      } catch (e) {
+        setStatus("error");
+        $$("#actionMsg").textContent = "Failed to start: " + e.message;
+      }
+    });
+
+    $$("#btnStop").addEventListener("click", async () => {
+      try {
+        $$("#actionMsg").textContent = "Stopping…";
+        await postJSON("/api/stop", {});
+        setStatus("stopped");
+        $$("#actionMsg").textContent = "Bot stopped.";
+      } catch (e) {
+        setStatus("error");
+        $$("#actionMsg").textContent = "Failed to stop: " + e.message;
+      }
+    });
+
+    // ----- Logs -----
+    const logArea = $$("#logArea");
+    const autoScroll = $$("#autoScroll");
+    const btnPoll = $$("#btnPollToggle");
+    const btnClear = $$("#btnClearLog");
+    const logFileInput = $$("#logFileInput");
+    let pollTimer = null;
+
+    function appendLog(text) {
+      logArea.textContent += text.endsWith("\n") ? text : text + "\n";
+      if (autoScroll.checked) logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    btnClear.addEventListener("click", () => logArea.textContent = "");
+
+    btnPoll.addEventListener("click", () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        btnPoll.textContent = "Start Polling";
+        toast("Stopped polling /api/logs");
+        return;
+      }
+      // start polling
+      let lastText = "";
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch("/api/logs", {cache:"no-store"});
+          if (!res.ok) return; // silently ignore until backend ready
+          const txt = await res.text();
+          if (txt !== lastText) {
+            const diff = txt.slice(lastText.length);
+            appendLog(diff || txt); // first time prints all
+            lastText = txt;
+          }
+        } catch (_) { /* ignore */ }
+      }, 3000);
+      btnPoll.textContent = "Stop Polling";
+      toast("Polling /api/logs every 3s");
+    });
+
+    logFileInput.addEventListener("change", async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const txt = await f.text();
+      logArea.textContent = txt;
+      if (autoScroll.checked) logArea.scrollTop = logArea.scrollHeight;
+      toast("Loaded local log file.");
+    });
+
+    // ----- Toast -----
+    function toast(message, warn=false) {
+      const el = document.createElement("div");
+      el.className = `fixed bottom-4 right-4 px-3 py-2 rounded-lg shadow text-sm ${warn ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-600 text-white'}`;
+      el.textContent = message;
+      document.body.appendChild(el);
+      setTimeout(()=>{ el.remove(); }, 2000);
+    }
+
+    // Optional: load any saved values on first open
+    (function init() {
+      const raw = localStorage.getItem(KEY);
+      if (raw) setConfigObj(JSON.parse(raw));
+    })();
+  </script>
+</body>
+</html>

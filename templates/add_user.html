@@ -1,0 +1,64 @@
+<!-- templates/add_user.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Add User</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+<div class="container mx-auto p-4">
+  <h1 class="text-2xl font-bold mb-4">Add User</h1>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="space-y-2 mb-4">
+        {% for category, message in messages %}
+          <div class="px-4 py-3 rounded border
+              {{ 'bg-green-50 border-green-300 text-green-800' if category=='success' else
+                 'bg-red-50 border-red-300 text-red-800' if category=='error' else
+                 'bg-blue-50 border-blue-300 text-blue-800' }}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" class="bg-white p-4 rounded border space-y-3">
+    <div>
+      <label class="block text-sm font-medium">USERNAME (email)</label>
+      <input name="username" class="mt-1 w-full rounded border-gray-300" required>
+    </div>
+    <div>
+      <label class="block text-sm font-medium">PASSWORD</label>
+      <input type="password" name="password" class="mt-1 w-full rounded border-gray-300" required>
+    </div>
+    <div>
+      <label class="block text-sm font-medium">SCHEDULE_ID</label>
+      <input name="schedule_id" class="mt-1 w-full rounded border-gray-300" required>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium">PRIOD_START</label>
+        <input type="date" name="period_start" class="mt-1 w-full rounded border-gray-300" required>
+      </div>
+      <div>
+        <label class="block text-sm font-medium">PRIOD_END</label>
+        <input type="date" name="period_end" class="mt-1 w-full rounded border-gray-300" required>
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-medium">YOUR_EMBASSY (key)</label>
+      <input name="embassy" class="mt-1 w-full rounded border-gray-300" placeholder="e.g. india_english" required>
+    </div>
+
+    <div class="flex gap-2 pt-2">
+      <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Save</button>
+      <a href="{{ url_for('index') }}" class="bg-gray-200 hover:bg-gray-300 text-gray-900 px-4 py-2 rounded">Cancel</a>
+    </div>
+  </form>
+</div>
+</body>
+</html>
