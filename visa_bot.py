@@ -161,38 +161,163 @@ def auto_action(driver, label, find_by, el, action, value="", sleep_time=0):
 def create_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")                  # if running as root
+    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument("--disable-software-rasterizer")
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-    chrome_options.add_argument("--disable-features=BlinkGenPropertyTrees")
-    chrome_options.binary_location = "/usr/bin/google-chrome"    # adjust if different
-    service = Service()  # Selenium Manager resolves chromedriver
-    return webdriver.Chrome(service=service, options=chrome_options)
+    chrome_options.add_argument("--lang=en-US,en")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    # A realistic UA helps avoid alternate DOMs on headless
+    chrome_options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+
+    # Reduce Selenium “automation” fingerprints
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
+    chrome_options.add_argument("--enable-javascript")
+    chrome_options.page_load_strategy = "eager"  # don’t wait for analytics etc.
+
+    chrome_options.binary_location = "/usr/bin/google-chrome"  # adjust if needed
+    service = Service()  # Selenium Manager will fetch chromedriver
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    # Patch navigator.webdriver
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"}
+    )
+    return driver
+
+
+
+def _wait_cloudflare(driver, max_seconds=30):
+    """Wait a bit if Cloudflare interstitial shows up."""
+    end = time.time() + max_seconds
+    while time.time() < end:
+        title = (driver.title or "").lower()
+        body_text = (driver.page_source or "").lower()
+        if "just a moment" in title or "checking your browser" in body_text:
+            time.sleep(1)
+            continue
+        return
+    # fallthrough — not fatal; we try the form waits next
+
+
+def _accept_cookies_if_present(driver):
+    # Common OneTrust / cookie banners
+    try:
+        # OneTrust default id
+        btn = driver.find_element(By.ID, "onetrust-accept-btn-handler")
+        btn.click()
+        time.sleep(0.5)
+        return
+    except Exception:
+        pass
+    # Fallbacks (don’t fail if not there)
+    try:
+        el = driver.find_element(By.XPATH, "//button[contains(., 'Accept') or contains(., 'I Agree')]")
+        el.click()
+        time.sleep(0.5)
+    except Exception:
+        pass
+
 
 def start_process(driver, username, password, regex_continue, sign_in_link, step_time=0.5):
     driver.get(sign_in_link)
-    Wait(driver, 60).until(EC.presence_of_element_located((By.NAME, "commit")))
-    # optional arrow; ignore if not present
+    _wait_cloudflare(driver, 45)
+    _accept_cookies_if_present(driver)
+
+    # Prefer waiting for the email input or the sign-in form, not the commit by name.
     try:
-        auto_action(driver, "Bounce", "xpath", '//a[contains(@class,"down-arrow")]', "click", "", step_time)
+        Wait(driver, 30).until(
+            EC.any_of(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "form[action*='sign_in'] input#user_email")),
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input#user_email"))
+            )
+        )
+    except Exception:
+        # Dump debug and raise a clearer message
+        dump_debug(driver, prefix="login_wait_failed")
+        raise TimeoutError("Login form (email field) did not appear — likely cookie/CF/splash blocking the page.")
+
+    # Some locales show a collapsible section/arrow before form
+    try:
+        arrow = driver.find_element(By.XPATH, '//a[contains(@class,"down-arrow") or contains(@class,"accordion")]')
+        arrow.click()
+        time.sleep(0.3)
     except Exception:
         pass
-    auto_action(driver, "Email", "id", "user_email", "send", username, step_time)
-    auto_action(driver, "Password", "id", "user_password", "send", password, step_time)
-    # privacy checkbox: stable selector first, fallback second
-    try:
-        driver.find_element(By.CSS_SELECTOR, "input#policy_confirmed").click()
-    except Exception:
+
+    # Fill credentials
+    email_el = driver.find_element(By.CSS_SELECTOR, "input#user_email")
+    pwd_el   = driver.find_element(By.CSS_SELECTOR, "input#user_password")
+    email_el.clear(); email_el.send_keys(username); time.sleep(step_time)
+    pwd_el.clear();   pwd_el.send_keys(password);   time.sleep(step_time)
+
+    # Privacy / policy checkbox (multiple fallbacks)
+    clicked_policy = False
+    for locator in [
+        (By.CSS_SELECTOR, "input#policy_confirmed"),
+        (By.XPATH, "//input[@id='policy_confirmed' or @name='policy_confirmed']"),
+        (By.XPATH, "//label[@for='policy_confirmed']"),
+        (By.XPATH, "//*[contains(@class,'icheckbox') or contains(@class,'checkbox')][1]")
+    ]:
         try:
-            auto_action(driver, "Privacy-fb", "class", "icheckbox", "click", "", step_time)
+            el = driver.find_element(*locator)
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'})", el)
+            try:
+                el.click()
+            except Exception:
+                driver.execute_script("arguments[0].click()", el)
+            clicked_policy = True
+            time.sleep(0.2)
+            break
         except Exception:
-            pass
-    auto_action(driver, "Enter Panel", "name", "commit", "click", "", step_time)
-    Wait(driver, 60).until(EC.presence_of_element_located((By.XPATH, f"//a[contains(text(), '{regex_continue}')]")))
+            continue
+
+    # Submit — be flexible on selector
+    submit = None
+    for locator in [
+        (By.CSS_SELECTOR, "form[action*='sign_in'] button[type='submit']"),
+        (By.CSS_SELECTOR, "form[action*='sign_in'] input[type='submit']"),
+        (By.XPATH, "//button[@type='submit' and (contains(.,'Sign in') or contains(.,'Log in'))]"),
+        (By.XPATH, "//input[@type='submit' and (contains(@value,'Sign in') or contains(@value,'Log in'))]"),
+        (By.NAME, "commit"),  # last resort
+    ]:
+        try:
+            submit = driver.find_element(*locator)
+            break
+        except Exception:
+            continue
+
+    if not submit:
+        dump_debug(driver, prefix="login_no_submit")
+        raise TimeoutError("Could not find the Sign In submit button (DOM likely changed).")
+
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'})", submit)
+        Wait(driver, 10).until(EC.element_to_be_clickable((submit.tag_name, submit.get_attribute("outerHTML"))))
+    except Exception:
+        pass  # best effort
+
+    try:
+        submit.click()
+    except Exception:
+        driver.execute_script("arguments[0].click()", submit)
+
+    # Post-submit: wait until the dashboard has the “Continue” anchor text for this embassy
+    try:
+        Wait(driver, 60).until(
+            EC.presence_of_element_located((By.XPATH, f"//a[contains(normalize-space(.), '{regex_continue}')]"))
+        )
+    except Exception:
+        # If we failed to transition, capture the page for debugging
+        dump_debug(driver, prefix="post_login_timeout")
+        # Common failure causes: wrong creds, hCaptcha, IP blocked, policy not ticked.
+        # Make the error explicit for logs:
+        raise TimeoutError("Login didn’t reach the dashboard. Check credentials, policy checkbox, or anti-bot interstitials.")
 
 def _require_session_cookie(driver, who=""):
     c = driver.get_cookie("_yatri_session")
