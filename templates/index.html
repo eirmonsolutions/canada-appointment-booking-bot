@@ -1,172 +1,266 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Visa Appointment Scheduler</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visa Appointment Bot</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100">
-<div class="container mx-auto p-4">
-  <h1 class="text-3xl font-bold mb-4">Visa Appointment Scheduler</h1>
+<body class="bg-gradient-to-br from-blue-50 via-blue-100 to-indigo-200 min-h-screen flex items-center justify-center">
+  <div class="max-w-4xl w-full bg-white/60 backdrop-blur-md shadow-xl rounded-2xl p-8 border border-white/30">
+    <h1 class="text-3xl font-extrabold text-center text-indigo-700 mb-6 tracking-tight">
+      🎯 Visa Appointment Bot
+    </h1>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <div class="space-y-2 mb-4">
-        {% for category, message in messages %}
-          <div class="px-4 py-3 rounded border
-              {{ 'bg-green-50 border-green-300 text-green-800' if category=='success' else
-                 'bg-red-50 border-red-300 text-red-800' if category=='error' else
-                 'bg-blue-50 border-blue-300 text-blue-800' }}">
-            {{ message }}
+    <div class="mb-6">
+      <label class="block text-sm font-semibold text-gray-700 mb-1">Number of Students</label>
+      <input
+        type="number"
+        id="numStudents"
+        value="1"
+        min="1"
+        class="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+
+    <div id="studentForms" class="space-y-6"></div>
+
+    <div class="text-center mt-6">
+      <button
+        id="submitButton"
+        class="bg-indigo-600 hover:bg-indigo-700 transition-all duration-300 text-white px-6 py-2.5 rounded-lg font-semibold shadow-md hover:shadow-lg"
+      >
+        🚀 Submit
+      </button>
+      <p id="message" class="mt-4 hidden text-lg font-medium"></p>
+    </div>
+
+    <hr class="my-8 border-indigo-200" />
+
+    <!-- Section for live status updates -->
+    <div id="liveArea" class="space-y-4"></div>
+  </div>
+
+  <script>
+    const embassies = [
+      { value: 'en-am-yer', label: 'Armenia - Yerevan' },
+      { value: 'es-co-bog', label: 'Colombia - Bogotá' },
+      { value: 'en-ca-cal', label: 'Canada - Calgary' },
+      { value: 'en-ca-hal', label: 'Canada - Halifax' },
+      { value: 'en-ca-mon', label: 'Canada - Montreal' },
+      { value: 'en-ca-ott', label: 'Canada - Ottawa' },
+      { value: 'en-ca-que', label: 'Canada - Quebec City' },
+      { value: 'en-ca-tor', label: 'Canada - Toronto' },
+      { value: 'en-ca-van', label: 'Canada - Vancouver' }
+    ];
+
+    const numStudentsInput = document.getElementById('numStudents');
+    const studentFormsDiv = document.getElementById('studentForms');
+    const submitButton = document.getElementById('submitButton');
+    const messageP = document.getElementById('message');
+    const liveArea = document.getElementById('liveArea');
+
+    const userCards = new Map();
+
+    function generateStudentForms(count) {
+      studentFormsDiv.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const studentDiv = document.createElement('div');
+        studentDiv.className =
+          'p-6 rounded-xl bg-white/70 backdrop-blur-lg border border-gray-200 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl';
+        studentDiv.innerHTML = `
+          <h2 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">👩‍🎓 Student ${i + 1}</h2>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Username</label>
+              <input type="text" name="username_${i}" placeholder="Enter username"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Password</label>
+              <input type="password" name="password_${i}" placeholder="Enter password"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Schedule ID</label>
+              <input type="text" name="schedule_id_${i}" placeholder="e.g., 123456"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Embassy</label>
+              <select name="embassy_${i}"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                ${embassies.map(emb => `<option value="${emb.value}">${emb.label}</option>`).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Period Start</label>
+              <input type="date" name="period_start_${i}" value="2025-12-01"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Period End</label>
+              <input type="date" name="period_end_${i}" value="2025-12-20"
+                class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+            </div>
           </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
+        `;
+        studentFormsDiv.appendChild(studentDiv);
+      }
+    }
 
-  <a href="{{ url_for('add_user') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-4 inline-block">
-    Add User
-  </a>
+    function normalizeKey(u){ return (u || '').trim().toLowerCase(); }
 
-  <h2 class="text-2xl font-semibold mb-2">Users</h2>
-  <div class="overflow-x-auto">
-    <table class="min-w-full bg-white border">
-      <thead>
-        <tr class="bg-gray-50">
-          <th scope="col" class="px-4 py-2 border text-left">Username</th>
-          <th scope="col" class="px-4 py-2 border text-left">Schedule ID</th>
-          <th scope="col" class="px-4 py-2 border text-left">Period</th>
-          <th scope="col" class="px-4 py-2 border text-left">Embassy</th>
-          <th scope="col" class="px-4 py-2 border text-left">Signed In</th>
-          <th scope="col" class="px-4 py-2 border text-left">Saved Session</th>
-          <th scope="col" class="px-4 py-2 border text-left">Status</th>
-          <th scope="col" class="px-4 py-2 border text-left">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for user in users %}
-        <tr class="odd:bg-white even:bg-gray-50">
-          <td class="px-4 py-2 border">{{ user.username }}</td>
-          <td class="px-4 py-2 border">{{ user.schedule_id }}</td>
-          <td class="px-4 py-2 border">{{ user.period_start }} - {{ user.period_end }}</td>
-          <td class="px-4 py-2 border">{{ user.embassy }}</td>
-          <td class="px-4 py-2 border">
-            {% if user.signed_in_at %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-sm bg-green-100 text-green-700">Yes</span>
-              <div class="text-xs text-gray-500 mt-1">{{ user.signed_in_at }}</div>
-            {% else %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-sm bg-gray-100 text-gray-700">No</span>
-            {% endif %}
-          </td>
-          <td class="px-4 py-2 border">
-            {% if user.session_id %}
-              <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ user.session_id[:8] }}••••</code>
-            {% else %}
-              <span class="text-gray-400 text-sm">None</span>
-            {% endif %}
-          </td>
-          <td class="px-4 py-2 border">
-            {% if user.is_active %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-sm bg-green-100 text-green-700">Active</span>
-            {% else %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-sm bg-gray-100 text-gray-700">Inactive</span>
-            {% endif %}
-          </td>
-          <td class="px-4 py-2 border">
-            <form action="{{ url_for('signin_user', user_id=user.id) }}" method="POST" class="inline signin-form">
-              <button type="submit" class="px-2 py-1 rounded text-white bg-indigo-600 hover:bg-indigo-700">Sign in & Save</button>
-            </form>
-            <form action="{{ url_for('toggle_user', user_id=user.id) }}" method="POST" class="inline toggle-form">
-              <button type="submit" class="px-2 py-1 rounded text-white {{ 'bg-red-500 hover:bg-red-600' if user.is_active else 'bg-green-600 hover:bg-green-700' }} ml-2">
-                {{ 'Stop' if user.is_active else 'Start' }}
-              </button>
-            </form>
-            <form action="{{ url_for('delete_user', user_id=user.id) }}" method="POST" class="inline delete-form">
-              <button type="submit" class="px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 ml-2">Delete</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    function createUserCard(username, periodStart, periodEnd) {
+      const key = normalizeKey(username);
+      if (userCards.has(key)) return userCards.get(key);
 
-  <h2 class="text-2xl font-semibold mb-2 mt-6">Logs</h2>
-  <div id="logs" aria-live="polite" class="bg-white p-4 border rounded max-h-96 overflow-y-auto">
-    {% for log in logs | reverse %}
-      <p class="mb-2" data-timestamp="{{ log.timestamp }}">
-        <span class="font-semibold">{{ log.timestamp }}</span> [{{ log.user }}]: {{ log.message }}
-      </p>
-    {% endfor %}
-  </div>
-</div>
+      const wrap = document.createElement('div');
+      wrap.className = 'mt-6 p-5 rounded-xl bg-white/90 border shadow';
 
-<script>
-  function formatTimestamp(isoString) {
-    const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
-  }
+      wrap.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-lg font-semibold text-gray-900">${username}</div>
+            <div class="text-xs text-gray-600">Watching: <span class="font-medium">${periodStart}</span> → <span class="font-medium">${periodEnd}</span></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="status-badge text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 border">Idle</span>
+          </div>
+        </div>
 
-  function reformatExistingTimestamps() {
-    const nodes = document.querySelectorAll('#logs [data-timestamp]');
-    nodes.forEach(p => {
-      const iso = p.dataset.timestamp;
-      const tsEl = p.querySelector('span.font-semibold');
-      if (iso && tsEl) tsEl.textContent = formatTimestamp(iso);
-    });
-  }
+        <div class="mt-3 hidden error-banner rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm"></div>
 
-  async function fetchLogs() {
-    try {
-      const response = await fetch('/logs', { cache: 'no-store' });
-      const logs = await response.json();
-      const logsContainer = document.getElementById('logs');
+        <div class="mt-4">
+          <div class="text-sm font-semibold text-gray-700 mb-2">Available Dates (in range)</div>
+          <div class="dates box rounded-lg border bg-white p-3 text-sm text-gray-800 min-h-[52px]">—</div>
+        </div>
+      `;
 
-      const existingKeys = new Set(
-        Array.from(logsContainer.querySelectorAll('p')).map(p =>
-          (p.dataset.timestamp || '') + '|' + (p.dataset.msghash || '')
-        )
-      );
+      const els = {
+        wrap,
+        status: wrap.querySelector('.status-badge'),
+        error: wrap.querySelector('.error-banner'),
+        dates: wrap.querySelector('.dates'),
+        periodStart, periodEnd
+      };
 
-      logs.reverse().forEach(log => {
-        const key = (log.timestamp || '') + '|' + (log.message || '').slice(0,120);
-        if (!existingKeys.has(key)) {
-          const p = document.createElement('p');
-          p.className = 'mb-2';
-          p.dataset.timestamp = log.timestamp;
-          p.dataset.msghash = (log.message || '').slice(0,120);
-          p.innerHTML = `<span class="font-semibold">${formatTimestamp(log.timestamp)}</span> [${log.user}]: ${log.message}`;
-          logsContainer.insertBefore(p, logsContainer.firstChild);
-          existingKeys.add(key);
+      liveArea.appendChild(wrap);
+      userCards.set(key, els);
+      return els;
+    }
+
+    function setStatus(el, text, color='gray') {
+      const map = {
+        gray: 'bg-gray-100 text-gray-700 border-gray-200',
+        green: 'bg-green-100 text-green-700 border-green-200',
+        red: 'bg-red-100 text-red-700 border-red-200',
+        blue: 'bg-blue-100 text-blue-700 border-blue-200',
+        amber: 'bg-amber-100 text-amber-800 border-amber-200',
+        indigo: 'bg-indigo-100 text-indigo-700 border-indigo-200'
+      };
+      el.className = `status-badge text-xs px-2 py-1 rounded-full border ${map[color] || map.gray}`;
+      el.textContent = text;
+    }
+
+    function paintDates(el, dates) {
+      if (!dates || !dates.length) { el.textContent = '—'; return; }
+      el.innerHTML = `
+        <div class="flex flex-wrap gap-2">
+          ${dates.map(d => `<span class="px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800">${d}</span>`).join('')}
+        </div>
+      `;
+    }
+
+    function showError(elError, kind, text) {
+      let msg = text || 'An error occurred.';
+      if (kind === 'INVALID_SESSION') {
+        msg = 'Invalid session / window closed. Re-login required.';
+      }
+      elError.textContent = msg;
+      elError.classList.remove('hidden');
+    }
+
+    function watchUser(username, periodStart, periodEnd) {
+      const els = createUserCard(username, periodStart, periodEnd);
+      setStatus(els.status, 'Connecting...', 'indigo');
+
+      const url = `/stream?username=${encodeURIComponent(username)}`;
+      const es = new EventSource(url);
+
+      es.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data || '{}');
+          const type = data.type;
+
+          if (type === 'STATUS' || type === 'TICK') {
+            setStatus(els.status, type === 'STATUS' ? 'Active' : 'Polling', 'blue');
+          }
+          if (type === 'DATES') {
+            paintDates(els.dates, data.dates || []);
+            setStatus(els.status, 'Date found', 'amber');
+          }
+          if (type === 'NO_DATES' || type === 'NO_VALID') {
+            paintDates(els.dates, []);
+            setStatus(els.status, 'No dates', 'gray');
+          }
+          if (type === 'SUCCESS') setStatus(els.status, 'Rescheduled', 'green');
+          if (type === 'FAIL' || type === 'ERROR') setStatus(els.status, 'Error', 'red');
+        } catch (e) {
+          console.warn('Parse error:', e);
         }
-      });
+      };
 
-      const items = logsContainer.querySelectorAll('p');
-      for (let i = 50; i < items.length; i++) items[i].remove();
-    } catch (error) {
-      console.error('Error fetching logs:', error);
+      es.onerror = () => setStatus(els.status, 'Disconnected', 'red');
     }
-  }
 
-  // UX: avoid double submits; confirm delete
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('.toggle-form') || e.target.closest('.signin-form')) {
-      const btn = e.target.closest('form').querySelector('button[type="submit"]');
-      if (btn) { btn.disabled = true; btn.classList.add('opacity-60','cursor-not-allowed'); }
-    }
-    if (e.target.closest('.delete-form')) {
-      if (!confirm('Delete this user? This cannot be undone.')) e.preventDefault();
-    }
-  });
+    numStudentsInput.addEventListener('change', (e) => {
+      const count = parseInt(e.target.value) || 1;
+      generateStudentForms(count);
+    });
 
-  reformatExistingTimestamps();
-  fetchLogs();
-  setInterval(fetchLogs, 5000);
-</script>
+    submitButton.addEventListener('click', async () => {
+      const numStudents = parseInt(numStudentsInput.value) || 1;
+      const students = [];
+
+      for (let i = 0; i < numStudents; i++) {
+        const username = document.querySelector(`[name="username_${i}"]`).value;
+        const password = document.querySelector(`[name="password_${i}"]`).value;
+        const schedule_id = document.querySelector(`[name="schedule_id_${i}"]`).value;
+        const embassy = document.querySelector(`[name="embassy_${i}"]`).value;
+        const period_start = document.querySelector(`[name="period_start_${i}"]`).value;
+        const period_end = document.querySelector(`[name="period_end_${i}"]`).value;
+        students.push({ username, password, schedule_id, embassy, period_start, period_end });
+      }
+
+      try {
+        const response = await fetch('/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ num_students: numStudents, students })
+        });
+        const result = await response.json();
+        messageP.textContent = result.message || result.error;
+        messageP.classList.remove('hidden');
+        messageP.classList.toggle('text-red-600', !!result.error);
+        messageP.classList.toggle('text-green-600', !result.error);
+
+        for (const s of students) {
+          if (s.username) watchUser(s.username, s.period_start, s.period_end);
+        }
+      } catch (error) {
+        messageP.textContent = 'Error submitting data: ' + error.message;
+        messageP.classList.remove('hidden');
+        messageP.classList.add('text-red-600');
+      }
+    });
+
+    generateStudentForms(1);
+  </script>
 </body>
 </html>
