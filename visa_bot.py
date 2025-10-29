@@ -300,14 +300,19 @@ def start_process(driver, username, password, regex_continue, sign_in_link, step
         try:
             el = driver.find_element(*locator)
             driver.execute_script("arguments[0].scrollIntoView({block:'center'})", el)
+            if not el.is_displayed() or not el.is_enabled():
+               driver.execute_script("arguments[0].click()", el)
             try:
                 el.click()
             except Exception:
                 driver.execute_script("arguments[0].click()", el)
             clicked_policy = True
+            print("✅ Policy checkbox clicked:", locator)
             time.sleep(0.2)
             break
+
         except Exception:
+            print(f"❌ Could not click policy checkbox with {locator}: {e}")
             continue
 
     # Submit — be flexible on selector
