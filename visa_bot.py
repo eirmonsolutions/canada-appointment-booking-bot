@@ -17,7 +17,6 @@ from selenium.webdriver.support.ui import WebDriverWait as Wait
 from selenium.webdriver.common.by import By
 
 from flask import Flask, request, jsonify, render_template, Response
-
 from flask_cors import CORS, cross_origin
 
 from embassy import Embassies  # your mapping
@@ -26,7 +25,6 @@ import logging
 
 # ===================== FLASK =====================
 app = Flask(__name__)
-# DEV: open CORS, PROD: tighten to your IP/origin
 CORS(app, resources={r"/submit": {"origins": "*"}})
 
 # ===================== CONFIG =====================
@@ -35,20 +33,17 @@ PRIOD_END_DEFAULT = "2025-12-20"
 CSV_FILE = "visa_appointments.csv"
 LOG_FILE = f"log_{datetime.now().date()}.txt"
 
-# SMTP from ENV (do NOT hardcode in code)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-SMTP_EMAIL = "manshusmartboy@gmail.com" 
-SMTP_PASSWORD = "cvvrefpzcxkqahen" 
+SMTP_EMAIL = "manshusmartboy@gmail.com"
+SMTP_PASSWORD = "cvvrefpzcxkqahen"
 
-# Debug dumps (screenshots + HTML on exception)
 DEBUG_DUMPS = True
 
-# File write locks (thread-safe)
 _file_lock = Lock()
 _log_lock = Lock()
 
-# ===================== UTILS =====================
+# ===================== LISTENERS =====================
 _listeners = set()
 _listeners_lock = Lock()
 
@@ -72,19 +67,13 @@ def _broadcast(msg: str):
                 dead.append(q)
         for q in dead:
             _listeners.discard(q)
-# ------------------------------------
 
-# ---- UPDATE log_info (broadcast + file; print optional) ----
 def log_info(user, msg):
     line = f"[{user}] {msg}"
-    # (optional) print(line, flush=True)  # agar terminal me bhi dekhna ho to rehne do
     with _log_lock:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} - {line}\n")
-    _broadcast(line)  # <- yahi magic
-# ------------------------------------------------------------
-
-
+    _broadcast(line)
 
 def dump_debug(driver, prefix="debug"):
     if not DEBUG_DUMPS:
@@ -96,12 +85,12 @@ def dump_debug(driver, prefix="debug"):
         with open(f"debug/{prefix}_{ts}.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
     except Exception:
-        pass  # best effort
+        pass
 
 def save_to_csv(data, status, result_msg):
     row = {
         "username": data.get("username", ""),
-        "password": data.get("password", ""),  # consider NOT saving plaintext in real use
+        "password": data.get("password", ""),
         "schedule_id": data.get("schedule_id", ""),
         "embassy": data.get("embassy", ""),
         "period_start": data.get("period_start", PRIOD_START_DEFAULT),
@@ -166,31 +155,6 @@ JS_SCRIPT = (
 )
 
 # ===================== SELENIUM HELPERS =====================
-def auto_action(driver, label, find_by, el, action, value="", sleep_time=0):
-    print(f"\t{label}:", end="", flush=True)
-    if find_by == "id":
-        item = driver.find_element(By.ID, el)
-    elif find_by == "name":
-        item = driver.find_element(By.NAME, el)
-    elif find_by == "class":
-        item = driver.find_element(By.CLASS_NAME, el)
-    elif find_by == "xpath":
-        item = driver.find_element(By.XPATH, el)
-    else:
-        print(" BAD_LOCATOR")
-        return
-    if action == "send":
-        item.clear()
-        item.send_keys(value)
-    elif action == "click":
-        item.click()
-    else:
-        print(" BAD_ACTION")
-        return
-    print(" OK")
-    if sleep_time:
-        time.sleep(sleep_time)
-
 def create_driver():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -200,33 +164,26 @@ def create_driver():
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--lang=en-US,en")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    # A realistic UA helps avoid alternate DOMs on headless
     chrome_options.add_argument(
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-
-    # Reduce Selenium “automation” fingerprints
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
     chrome_options.add_argument("--enable-javascript")
-    chrome_options.page_load_strategy = "eager"  # don’t wait for analytics etc.
+    chrome_options.page_load_strategy = "eager"
 
-    chrome_options.binary_location = "/usr/bin/google-chrome"  # adjust if needed
-    service = Service()  # Selenium Manager will fetch chromedriver
+    chrome_options.binary_location = "/usr/bin/google-chrome"
+    service = Service()
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
-    # Patch navigator.webdriver
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"}
     )
     return driver
 
-
-
 def _wait_cloudflare(driver, max_seconds=30):
-    """Wait a bit if Cloudflare interstitial shows up."""
     end = time.time() + max_seconds
     while time.time() < end:
         title = (driver.title or "").lower()
@@ -235,20 +192,15 @@ def _wait_cloudflare(driver, max_seconds=30):
             time.sleep(1)
             continue
         return
-    # fallthrough — not fatal; we try the form waits next
-
 
 def _accept_cookies_if_present(driver):
-    # Common OneTrust / cookie banners
     try:
-        # OneTrust default id
         btn = driver.find_element(By.ID, "onetrust-accept-btn-handler")
         btn.click()
         time.sleep(0.5)
         return
     except Exception:
         pass
-    # Fallbacks (don’t fail if not there)
     try:
         el = driver.find_element(By.XPATH, "//button[contains(., 'Accept') or contains(., 'I Agree')]")
         el.click()
@@ -256,13 +208,47 @@ def _accept_cookies_if_present(driver):
     except Exception:
         pass
 
+# --- NEW: Robust iCheck Policy Checkbox ---
+def _click_policy_checkbox(driver):
+    # Strategy 1: Click the visible iCheck div
+    try:
+        ichk_div = driver.find_element(By.XPATH, "//div[contains(@class, 'icheckbox') and .//input[@id='policy_confirmed']]")
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", ichk_div)
+        driver.execute_script("arguments[0].click();", ichk_div)
+        time.sleep(0.7)
+        return True
+    except Exception as e:
+        log_info("system", f"iCheck div click failed: {e}")
+
+    # Strategy 2: JS force-check input
+    try:
+        inp = driver.find_element(By.ID, "policy_confirmed")
+        driver.execute_script("""
+            arguments[0].checked = true;
+            arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
+            arguments[0].dispatchEvent(new Event('click', {bubbles: true}));
+        """, inp)
+        time.sleep(0.5)
+        return True
+    except Exception as e:
+        log_info("system", f"JS check failed: {e}")
+
+    # Strategy 3: Click label
+    try:
+        label = driver.find_element(By.XPATH, "//label[@for='policy_confirmed']")
+        driver.execute_script("arguments[0].click();", label)
+        time.sleep(0.5)
+        return True
+    except Exception:
+        pass
+
+    return False
 
 def start_process(driver, username, password, regex_continue, sign_in_link, step_time=0.5):
     driver.get(sign_in_link)
     _wait_cloudflare(driver, 45)
     _accept_cookies_if_present(driver)
 
-    # Prefer waiting for the email input or the sign-in form, not the commit by name.
     try:
         Wait(driver, 30).until(
             EC.any_of(
@@ -271,11 +257,9 @@ def start_process(driver, username, password, regex_continue, sign_in_link, step
             )
         )
     except Exception:
-        # Dump debug and raise a clearer message
         dump_debug(driver, prefix="login_wait_failed")
         raise TimeoutError("Login form (email field) did not appear — likely cookie/CF/splash blocking the page.")
 
-    # Some locales show a collapsible section/arrow before form
     try:
         arrow = driver.find_element(By.XPATH, '//a[contains(@class,"down-arrow") or contains(@class,"accordion")]')
         arrow.click()
@@ -283,46 +267,24 @@ def start_process(driver, username, password, regex_continue, sign_in_link, step
     except Exception:
         pass
 
-    # Fill credentials
     email_el = driver.find_element(By.CSS_SELECTOR, "input#user_email")
-    pwd_el   = driver.find_element(By.CSS_SELECTOR, "input#user_password")
+    pwd_el = driver.find_element(By.CSS_SELECTOR, "input#user_password")
     email_el.clear(); email_el.send_keys(username); time.sleep(step_time)
-    pwd_el.clear();   pwd_el.send_keys(password);   time.sleep(step_time)
+    pwd_el.clear(); pwd_el.send_keys(password); time.sleep(step_time)
 
-    # Privacy / policy checkbox (multiple fallbacks)
-    clicked_policy = False
-    for locator in [
-        (By.CSS_SELECTOR, "input#policy_confirmed"),
-        (By.XPATH, "//input[@id='policy_confirmed' or @name='policy_confirmed']"),
-        (By.XPATH, "//label[@for='policy_confirmed']"),
-        (By.XPATH, "//*[contains(@class,'icheckbox') or contains(@class,'checkbox')][1]")
-    ]:
-        try:
-            el = driver.find_element(*locator)
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'})", el)
-            if not el.is_displayed() or not el.is_enabled():
-               driver.execute_script("arguments[0].click()", el)
-            try:
-                el.click()
-            except Exception:
-                driver.execute_script("arguments[0].click()", el)
-            clicked_policy = True
-            print("✅ Policy checkbox clicked:", locator)
-            time.sleep(0.2)
-            break
+    # --- Policy Checkbox ---
+    if not _click_policy_checkbox(driver):
+        dump_debug(driver, "policy_fail")
+        raise RuntimeError("Could not check policy_confirmed (iCheck checkbox)")
 
-        except Exception:
-            print(f"❌ Could not click policy checkbox with {locator}: {e}")
-            continue
-
-    # Submit — be flexible on selector
+    # --- Submit Button ---
     submit = None
     for locator in [
         (By.CSS_SELECTOR, "form[action*='sign_in'] button[type='submit']"),
         (By.CSS_SELECTOR, "form[action*='sign_in'] input[type='submit']"),
         (By.XPATH, "//button[@type='submit' and (contains(.,'Sign in') or contains(.,'Log in'))]"),
         (By.XPATH, "//input[@type='submit' and (contains(@value,'Sign in') or contains(@value,'Log in'))]"),
-        (By.NAME, "commit"),  # last resort
+        (By.NAME, "commit"),
     ]:
         try:
             submit = driver.find_element(*locator)
@@ -332,30 +294,33 @@ def start_process(driver, username, password, regex_continue, sign_in_link, step
 
     if not submit:
         dump_debug(driver, prefix="login_no_submit")
-        raise TimeoutError("Could not find the Sign In submit button (DOM likely changed).")
+        raise TimeoutError("Could not find the Sign In submit button.")
 
     try:
-        driver.execute_script("arguments[0].scrollIntoView({block:'center'})", submit)
-        Wait(driver, 10).until(EC.element_to_be_clickable((submit.tag_name, submit.get_attribute("outerHTML"))))
-    except Exception:
-        pass  # best effort
-
-    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit)
         submit.click()
     except Exception:
-        driver.execute_script("arguments[0].click()", submit)
+        driver.execute_script("arguments[0].click();", submit)
 
-    # Post-submit: wait until the dashboard has the “Continue” anchor text for this embassy
+    time.sleep(3)
+    page_text = driver.page_source.lower()
+    if any(x in page_text for x in ["hcaptcha", "captcha", "verify you are human", "security check"]):
+        dump_debug(driver, prefix="captcha_detected")
+        raise RuntimeError("hCaptcha or anti-bot challenge detected. Manual intervention or proxy rotation needed.")
+
+    # --- Dashboard Detection ---
     try:
         Wait(driver, 60).until(
-            EC.presence_of_element_located((By.XPATH, f"//a[contains(normalize-space(.), '{regex_continue}')]"))
+            EC.presence_of_element_located((By.XPATH, f"//a[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{regex_continue.lower()}')]"))
         )
     except Exception:
-        # If we failed to transition, capture the page for debugging
-        dump_debug(driver, prefix="post_login_timeout")
-        # Common failure causes: wrong creds, hCaptcha, IP blocked, policy not ticked.
-        # Make the error explicit for logs:
-        raise TimeoutError("Login didn’t reach the dashboard. Check credentials, policy checkbox, or anti-bot interstitials.")
+        try:
+            Wait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//a[contains(@href, 'appointment') or contains(., 'Continue') or contains(., 'Schedule')]"))
+            )
+        except Exception:
+            dump_debug(driver, prefix="dashboard_detection_failed")
+            raise TimeoutError("Dashboard loaded but no Continue/Appointment link found.")
 
 def _require_session_cookie(driver, who=""):
     c = driver.get_cookie("_yatri_session")
@@ -370,7 +335,6 @@ def get_date(driver, date_url):
         raw = driver.execute_script(script)
         data = json.loads(raw) if raw else []
         if isinstance(data, dict) and "available_dates" in data:
-            # some endpoints wrap in a key
             return data.get("available_dates") or []
         return data or []
     except Exception as e:
@@ -417,7 +381,6 @@ def reschedule(driver, date, facility_id, appointment_url, time_url_tpl):
         return "EXCEPTION", str(e)
 
 # ===================== THREAD TASK =====================
-
 def process_user(user_data):
     username = user_data["username"]
     password = user_data["password"]
@@ -441,7 +404,7 @@ def process_user(user_data):
     req_count = 0
     retry_time_l_bound = 10
     retry_time_u_bound = 120
-    ban_cooldown_time = 5 * 3600  # 5 hours
+    ban_cooldown_time = 5 * 3600
 
     try:
         driver = create_driver()
@@ -456,7 +419,6 @@ def process_user(user_data):
                 req_count += 1
                 log_info(username, f"Request #{req_count}")
                 dates_payload = get_date(driver, DATE_URL)
-                # normalize to list of {"date": "YYYY-MM-DD"}
                 if dates_payload and isinstance(dates_payload, list) and isinstance(dates_payload[0], dict) and "date" in dates_payload[0]:
                     available_dates = [d.get('date') for d in dates_payload]
                 elif isinstance(dates_payload, list):
@@ -497,7 +459,6 @@ def process_user(user_data):
                 dump_debug(driver, prefix=username)
                 log_info(username, f"Exception: {e}\n{traceback.format_exc()}")
                 save_to_csv(user_data, "EXCEPTION", str(e))
-                # break OR continue? existing behavior: break
                 break
 
     finally:
@@ -513,12 +474,8 @@ def process_user(user_data):
         log_info(username, "Session finished.")
 
 # ===================== FLASK ROUTES =====================
-
-
-
 @app.route('/')
 def serve_index():
-    # Keep a simple index; ensure templates/index.html exists OR just return text
     try:
         return render_template('index.html')
     except Exception:
@@ -537,11 +494,10 @@ def submit():
     if len(students) != num_students:
         return jsonify({"error": "Invalid number of students provided"}), 400
 
-    # Non-blocking: daemon threads; return immediately
     for student in students:
         t = threading.Thread(target=process_user, args=(student,), daemon=True)
         t.start()
-        time.sleep(2)  # slight stagger to avoid simultaneous login
+        time.sleep(2)
 
     return jsonify({"message": "Processing started", "count": len(students)}), 202
 
@@ -551,26 +507,23 @@ def stream_logs():
     q = _register_listener()
 
     def gen():
-        # initial hello so client turant open ho jaye
         yield "event: hello\ndata: connected\n\n"
         try:
             while True:
                 try:
-                    msg = q.get(timeout=15)  # 15s me agar kuch na aaya to heartbeat
+                    msg = q.get(timeout=15)
                     yield f"data: {msg}\n\n"
                 except Empty:
-                    # heartbeat to keep connection alive (important behind proxies)
                     yield ": ping\n\n"
         except GeneratorExit:
             _remove_listener(q)
 
-    # SSE headers
     headers = {
         "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no"  # nginx buffering ko disable hint
+        "X-Accel-Buffering": "no"
     }
     return Response(gen(), mimetype="text/event-stream", headers=headers)
+
 # ===================== MAIN =====================
 if __name__ == "__main__":
-    # DEV only. In prod use gunicorn.
-    app.run(host="0.0.0.0", port=5008)
+    app.run(host="0.0.0.0", port=5004)
