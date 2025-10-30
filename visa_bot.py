@@ -93,8 +93,8 @@ def save_to_csv(data, status, result_msg):
         "password": data.get("password", ""),
         "schedule_id": data.get("schedule_id", ""),
         "embassy": data.get("embassy", ""),
-        "period_start": data.get("period_start", PRIOD_START_DEFAULT),
-        "period_end": data.get("period_end", PRIOD_END_DEFAULT),
+        "period_start": data.get("period_start"),
+        "period_end": data.get("period_end"),
         "status": status,
         "result": result_msg,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -426,7 +426,14 @@ def process_user(user_data):
                 else:
                     available_dates = []
 
+
                 log_info(username, f"Available Dates: {', '.join(available_dates) if available_dates else 'NONE'}")
+                if available_dates:
+                    period_start = available_dates[0]
+                    period_end = available_dates[-1]
+                    log_info(username, f"Date Range: {period_start} → {period_end}")
+                else:
+                    log_info(username, "Date Range: NONE")
 
                 if not available_dates:
                     log_info(username, f"No dates found. Sleeping {ban_cooldown_time/3600} hours...")
