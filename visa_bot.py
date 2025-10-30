@@ -333,12 +333,23 @@ def get_date(driver, date_url):
     script = JS_SCRIPT % (str(date_url), session)
     try:
         raw = driver.execute_script(script)
-        data = json.loads(raw) if raw else []
+        
+        # Log the raw response for debugging
+        log_info("system", f"Date API Response: {raw[:200] if raw else 'EMPTY'}")
+        
+        if not raw or raw.strip() == "":
+            raise RuntimeError("Empty response from date API - possible session expired or rate limit")
+        
+        data = json.loads(raw)
+        
         if isinstance(data, dict) and "available_dates" in data:
             return data.get("available_dates") or []
         return data or []
-    except Exception as e:
+    except json.JSONDecodeError as e:
+        log_info("system", f"JSON parse error. Raw response: {raw[:500] if raw else 'EMPTY'}")
         raise RuntimeError(f"get_date JSON parse failed: {e}")
+    except Exception as e:
+        raise RuntimeError(f"get_date failed: {e}")
 
 def get_time(driver, date, time_url_tpl):
     session = _require_session_cookie(driver, "get_time")
@@ -403,8 +414,8 @@ def process_user(user_data):
     first_loop = True
     req_count = 0
     retry_time_l_bound = 10
-    retry_time_u_bound = 120
-    ban_cooldown_time = 5 * 3600
+    retry_time_u_bound = 80
+    ban_cooldown_time = 2 * 3600
 
     try:
         driver = create_driver()
