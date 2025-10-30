@@ -323,22 +323,49 @@ def start_process(driver, username, password, regex_continue, sign_in_link, step
             raise TimeoutError("Dashboard loaded but no Continue/Appointment link found.")
 
 def _require_session_cookie(driver, who=""):
-    c = driver.get_cookie("_yatri_session")
-    if not c or "value" not in c:
-        raise RuntimeError(f"_yatri_session cookie missing ({who}) — login likely failed")
-    return c["value"]
+    try:
+        c = driver.get_cookie("_yatri_session")
+        if not c or "value" not in c:
+            log_info("system", f"Session cookie missing at {who} - cookies: {driver.get_cookies()}")
+            raise RuntimeError(f"_yatri_session cookie missing ({who}) — login likely failed")
+        
+        session_value = c["value"]
+        log_info("system", f"Session cookie found ({who}): {session_value[:20]}...")
+        return session_value
+    except Exception as e:
+        log_info("system", f"Error getting session cookie at {who}: {e}")
+        raise
 
 def get_date(driver, date_url):
     session = _require_session_cookie(driver, "get_date")
     script = JS_SCRIPT % (str(date_url), session)
     try:
-        raw = driver.execute_script(script)
-        data = json.loads(raw) if raw else []
+        raw_result = driver.execute_script(script)
+        log_info("system", f"XHR Result: {raw_result[:500] if raw_result else 'EMPTY'}")
+        
+        result = json.loads(raw_result)
+        status = result.get("status")
+        raw = result.get("response", "")
+        
+        log_info("system", f"HTTP Status: {status}, Response length: {len(raw) if raw else 0}")
+        
+        if status != 200:
+            raise RuntimeError(f"API returned status {status}")
+        
+        if not raw or raw.strip() == "":
+            raise RuntimeError("Empty response from API")
+        
+        data = json.loads(raw)
+        
         if isinstance(data, dict) and "available_dates" in data:
             return data.get("available_dates") or []
         return data or []
-    except Exception as e:
+        
+    except json.JSONDecodeError as e:
+        log_info("system", f"JSON parse error: {e}")
         raise RuntimeError(f"get_date JSON parse failed: {e}")
+    except Exception as e:
+        raise RuntimeError(f"get_date failed: {e}")
 
 def get_time(driver, date, time_url_tpl):
     session = _require_session_cookie(driver, "get_time")
@@ -403,8 +430,8 @@ def process_user(user_data):
     first_loop = True
     req_count = 0
     retry_time_l_bound = 10
-    retry_time_u_bound = 120
-    ban_cooldown_time = 5 * 3600
+    retry_time_u_bound = 80
+    ban_cooldown_time = 2 * 3600
 
     try:
         driver = create_driver()
@@ -459,6 +486,16 @@ def process_user(user_data):
                 dump_debug(driver, prefix=username)
                 log_info(username, f"Exception: {e}\n{traceback.format_exc()}")
                 save_to_csv(user_data, "EXCEPTION", str(e))
+                
+                # Handle session expiry or empty responses
+                error_msg = str(e).lower()
+                if any(x in error_msg for x in ["empty response", "json parse failed", "session", "auth"]):
+                    log_info(username, "Detected session/auth issue - will re-login after cooldown")
+                    first_loop = True  # Force re-login
+                    time.sleep(60)  # Wait 1 minute before retry
+                    continue  # Try again with fresh login
+                
+                # For other exceptions, exit
                 break
 
     finally:

@@ -6,19 +6,20 @@
   <title>Visa Appointment Bot</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gradient-to-br from-blue-50 via-blue-100 to-indigo-200 min-h-screen flex items-center justify-center">
+<body class="bg-gradient-to-br from-blue-50 via-blue-100 to-indigo-200 min-h-screen flex items-center justify-center p-4">
   <div class="max-w-4xl w-full bg-white/60 backdrop-blur-md shadow-xl rounded-2xl p-8 border border-white/30">
     <h1 class="text-3xl font-extrabold text-center text-indigo-700 mb-6 tracking-tight">
       🎯 Visa Appointment Bot
     </h1>
 
     <div class="mb-6">
-      <label class="block text-sm font-semibold text-gray-700 mb-1">Number of Student's</label>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">Number of Students</label>
       <input
         type="number"
         id="numStudents"
         value="1"
         min="1"
+        max="10"
         class="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
       />
     </div>
@@ -28,24 +29,38 @@
     <div class="text-center mt-6">
       <button
         id="submitButton"
-        class="bg-indigo-600 hover:bg-indigo-700 transition-all duration-300 text-white px-6 py-2.5 rounded-lg font-semibold shadow-md hover:shadow-lg"
+        class="bg-indigo-600 hover:bg-indigo-700 transition-all duration-300 text-white px-6 py-2.5 rounded-lg font-semibold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
       >
         🚀 Submit
       </button>
       <p id="message" class="mt-4 hidden text-lg font-medium"></p>
     </div>
 
-
     <div class="mt-8">
-  <h3 class="text-lg font-semibold text-gray-800 mb-2">Live Logs</h3>
-  <pre id="liveLog"
-       class="h-64 overflow-auto bg-black text-green-400 p-4 rounded-lg text-sm leading-5 border border-gray-700"></pre>
-</div>
-
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="text-lg font-semibold text-gray-800">Live Logs</h3>
+        <button
+          id="clearLogs"
+          class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+        >
+          Clear Logs
+        </button>
+      </div>
+      <pre id="liveLog"
+           class="h-64 overflow-auto bg-black text-green-400 p-4 rounded-lg text-sm leading-5 border border-gray-700 font-mono"></pre>
+      <div class="mt-2 flex items-center gap-2">
+        <span id="connectionStatus" class="inline-flex items-center gap-2 text-sm">
+          <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+          <span class="text-gray-600">Connecting...</span>
+        </span>
+        <span id="logCount" class="text-xs text-gray-500 ml-auto">0 lines</span>
+      </div>
+    </div>
 
   </div>
 
   <script>
+    const MAX_LINES = 500;
     const embassies = [
       { value: 'en-am-yer', label: 'Armenia - Yerevan' },
       { value: 'es-co-bog', label: 'Colombia - Bogotá' },
@@ -62,7 +77,14 @@
     const studentFormsDiv = document.getElementById('studentForms');
     const submitButton = document.getElementById('submitButton');
     const messageP = document.getElementById('message');
+    const liveLog = document.getElementById('liveLog');
+    const clearLogsBtn = document.getElementById('clearLogs');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const logCount = document.getElementById('logCount');
 
+    let logLines = [];
+
+    // Generate student forms
     function generateStudentForms(count) {
       studentFormsDiv.innerHTML = '';
       for (let i = 0; i < count; i++) {
@@ -73,25 +95,28 @@
           <h2 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">👩‍🎓 Student ${i + 1}</h2>
           <div class="grid md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700">Username</label>
-              <input type="text" name="username_${i}" placeholder="Enter username"
+              <label class="block text-sm font-medium text-gray-700">Username *</label>
+              <input type="text" name="username_${i}" placeholder="Enter email"
+                required
                 class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700">Password</label>
+              <label class="block text-sm font-medium text-gray-700">Password *</label>
               <input type="password" name="password_${i}" placeholder="Enter password"
+                required
                 class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700">Schedule ID</label>
-              <input type="text" name="schedule_id_${i}" placeholder="e.g., 123456"
+              <label class="block text-sm font-medium text-gray-700">Schedule ID *</label>
+              <input type="text" name="schedule_id_${i}" placeholder="e.g., 34927504"
+                required
                 class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700">Embassy</label>
+              <label class="block text-sm font-medium text-gray-700">Embassy *</label>
               <select name="embassy_${i}"
                 class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
                 ${embassies.map(emb => `<option value="${emb.value}">${emb.label}</option>`).join('')}
@@ -99,14 +124,16 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700">Period Start</label>
+              <label class="block text-sm font-medium text-gray-700">Period Start *</label>
               <input type="date" name="period_start_${i}" value="2025-12-01"
+                required
                 class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700">Period End</label>
+              <label class="block text-sm font-medium text-gray-700">Period End *</label>
               <input type="date" name="period_end_${i}" value="2025-12-20"
+                required
                 class="mt-1 block w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
             </div>
           </div>
@@ -115,25 +142,98 @@
       }
     }
 
-    numStudentsInput.addEventListener('change', (e) => {
-      const count = parseInt(e.target.value) || 1;
-      generateStudentForms(count);
+    // Update connection status
+    function updateConnectionStatus(connected) {
+      const dot = connectionStatus.querySelector('.w-2');
+      const text = connectionStatus.querySelector('span:last-child');
+      
+      if (connected) {
+        dot.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+        text.textContent = 'Connected';
+        text.className = 'text-green-600';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-red-500';
+        text.textContent = 'Disconnected';
+        text.className = 'text-red-600';
+      }
+    }
+
+    // Add log line with limit
+    function addLogLine(line) {
+      const timestamp = new Date().toLocaleTimeString();
+      logLines.push(`[${timestamp}] ${line}`);
+      
+      // Keep only last MAX_LINES
+      if (logLines.length > MAX_LINES) {
+        logLines = logLines.slice(-MAX_LINES);
+      }
+      
+      liveLog.textContent = logLines.join('\n');
+      liveLog.scrollTop = liveLog.scrollHeight;
+      logCount.textContent = `${logLines.length} lines`;
+    }
+
+    // Clear logs
+    clearLogsBtn.addEventListener('click', () => {
+      logLines = [];
+      liveLog.textContent = '';
+      logCount.textContent = '0 lines';
     });
 
+    // Validate form data
+    function validateStudentData(students) {
+      for (let i = 0; i < students.length; i++) {
+        const s = students[i];
+        if (!s.username || !s.password || !s.schedule_id) {
+          return { valid: false, message: `Student ${i + 1}: Please fill all required fields` };
+        }
+        if (!s.username.includes('@')) {
+          return { valid: false, message: `Student ${i + 1}: Invalid email format` };
+        }
+        if (!s.period_start || !s.period_end) {
+          return { valid: false, message: `Student ${i + 1}: Please select both dates` };
+        }
+        if (new Date(s.period_start) > new Date(s.period_end)) {
+          return { valid: false, message: `Student ${i + 1}: Start date must be before end date` };
+        }
+      }
+      return { valid: true };
+    }
+
+    // Number of students change handler
+    numStudentsInput.addEventListener('change', (e) => {
+      const count = parseInt(e.target.value) || 1;
+      generateStudentForms(Math.max(1, Math.min(10, count)));
+    });
+
+    // Submit handler
     submitButton.addEventListener('click', async () => {
       const numStudents = parseInt(numStudentsInput.value) || 1;
       const students = [];
 
       for (let i = 0; i < numStudents; i++) {
         students.push({
-          username: document.querySelector(`[name="username_${i}"]`).value,
+          username: document.querySelector(`[name="username_${i}"]`).value.trim(),
           password: document.querySelector(`[name="password_${i}"]`).value,
-          schedule_id: document.querySelector(`[name="schedule_id_${i}"]`).value,
+          schedule_id: document.querySelector(`[name="schedule_id_${i}"]`).value.trim(),
           embassy: document.querySelector(`[name="embassy_${i}"]`).value,
           period_start: document.querySelector(`[name="period_start_${i}"]`).value,
           period_end: document.querySelector(`[name="period_end_${i}"]`).value
         });
       }
+
+      // Validate
+      const validation = validateStudentData(students);
+      if (!validation.valid) {
+        messageP.textContent = validation.message;
+        messageP.classList.remove('hidden');
+        messageP.className = 'mt-4 text-lg font-medium text-red-600';
+        return;
+      }
+
+      // Disable button and show loading
+      submitButton.disabled = true;
+      submitButton.innerHTML = '⏳ Processing...';
 
       try {
         const response = await fetch('/submit', {
@@ -141,55 +241,58 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ num_students: numStudents, students })
         });
+        
         const result = await response.json();
+        
         messageP.textContent = result.message || result.error;
         messageP.classList.remove('hidden');
-        messageP.classList.toggle('text-red-600', !!result.error);
-        messageP.classList.toggle('text-green-600', !result.error);
+        messageP.className = result.error 
+          ? 'mt-4 text-lg font-medium text-red-600'
+          : 'mt-4 text-lg font-medium text-green-600';
+        
+        if (!result.error) {
+          addLogLine(`✅ Submitted ${numStudents} student(s) for processing`);
+        }
       } catch (error) {
         messageP.textContent = 'Error submitting data: ' + error.message;
         messageP.classList.remove('hidden');
-        messageP.classList.add('text-red-600');
+        messageP.className = 'mt-4 text-lg font-medium text-red-600';
+      } finally {
+        // Re-enable button
+        submitButton.disabled = false;
+        submitButton.innerHTML = '🚀 Submit';
       }
     });
 
-    // Initialize with one student form
+    // Log streaming
+    function startLogStream() {
+      updateConnectionStatus(false);
+      
+      const es = new EventSource('/logs/stream');
+
+      es.addEventListener('hello', () => {
+        addLogLine('[system] Log stream connected');
+        updateConnectionStatus(true);
+      });
+
+      es.onmessage = (e) => {
+        if (e.data && e.data.trim() !== '') {
+          addLogLine(e.data);
+        }
+      };
+
+      es.onerror = (err) => {
+        console.error('EventSource error:', err);
+        addLogLine('[system] ⚠️ Stream disconnected, reconnecting in 3s...');
+        updateConnectionStatus(false);
+        es.close();
+        setTimeout(startLogStream, 3000);
+      };
+    }
+
+    // Initialize
     generateStudentForms(1);
+    startLogStream();
   </script>
-
-
-<script>
-
-  const MAX_LINES = 1000;
-  const liveLog = document.getElementById('liveLog');
-
-  function startLogStream(){
-    const es = new EventSource('/logs/stream');
-
-    es.addEventListener('hello', () => {
-      liveLog.textContent += '[system] log stream connected\n';
-      liveLog.scrollTop = liveLog.scrollHeight;
-    });
-
-    es.onmessage = (e) => {
-      // each log line
-      liveLog.textContent += e.data + '\n';
-      liveLog.scrollTop = liveLog.scrollHeight;
-    };
-
-    es.onerror = () => {
-      liveLog.textContent += '[system] stream error, retrying in 3s...\n';
-      liveLog.scrollTop = liveLog.scrollHeight;
-      es.close();
-      setTimeout(startLogStream, 3000); // auto-reconnect
-    };
-  }
-
-  // start on load
-  startLogStream();
-</script>
-
-
-
 </body>
 </html>
