@@ -151,9 +151,8 @@ JS_SCRIPT = (
     "req.setRequestHeader('X-Requested-With', 'XMLHttpRequest');"
     "req.setRequestHeader('Cookie', '_yatri_session=%s');"
     "req.send(null);"
-    "return req.responseText;"
+    "return JSON.stringify({status: req.status, response: req.responseText});"
 )
-
 # ===================== SELENIUM HELPERS =====================
 def create_driver():
     chrome_options = Options()
@@ -341,20 +340,33 @@ def get_date(driver, date_url):
     script = JS_SCRIPT % (str(date_url), session)
     try:
         raw_result = driver.execute_script(script)
-        log_info("system", f"XHR Result: {raw_result[:500] if raw_result else 'EMPTY'}")
+        log_info("system", f"XHR Result (first 200 chars): {raw_result[:200] if raw_result else 'EMPTY'}")
         
-        result = json.loads(raw_result)
-        status = result.get("status")
-        raw = result.get("response", "")
+        # Parse the wrapper JSON
+        try:
+            result = json.loads(raw_result)
+            status = result.get("status", 0)
+            raw = result.get("response", "")
+        except json.JSONDecodeError:
+            # Fallback if JS_SCRIPT returns raw text
+            log_info("system", "JS_SCRIPT returned non-JSON, treating as raw response")
+            status = 200
+            raw = raw_result
         
         log_info("system", f"HTTP Status: {status}, Response length: {len(raw) if raw else 0}")
         
-        if status != 200:
+        # Check for HTML responses (session expired or blocked)
+        if raw and (raw.strip().startswith("<!DOCTYPE") or raw.strip().startswith("<html")):
+            log_info("system", "Received HTML instead of JSON - session expired or blocked")
+            raise RuntimeError("Session expired or blocked - received HTML page instead of JSON")
+        
+        if status not in [200, 201]:
             raise RuntimeError(f"API returned status {status}")
         
         if not raw or raw.strip() == "":
             raise RuntimeError("Empty response from API")
         
+        # Parse the actual data
         data = json.loads(raw)
         
         if isinstance(data, dict) and "available_dates" in data:
@@ -363,9 +375,11 @@ def get_date(driver, date_url):
         
     except json.JSONDecodeError as e:
         log_info("system", f"JSON parse error: {e}")
+        log_info("system", f"Raw content: {raw[:500] if 'raw' in locals() else 'N/A'}")
         raise RuntimeError(f"get_date JSON parse failed: {e}")
     except Exception as e:
         raise RuntimeError(f"get_date failed: {e}")
+
 
 def get_time(driver, date, time_url_tpl):
     session = _require_session_cookie(driver, "get_time")
@@ -429,9 +443,9 @@ def process_user(user_data):
     driver = None
     first_loop = True
     req_count = 0
-    retry_time_l_bound = 10
-    retry_time_u_bound = 80
-    ban_cooldown_time = 2 * 3600
+    retry_time_l_bound = 60
+    retry_time_u_bound = 180
+    ban_cooldown_time = 4 * 3600
 
     try:
         driver = create_driver()
@@ -442,6 +456,7 @@ def process_user(user_data):
                     start_process(driver, username, password, regex_continue, SIGN_IN_LINK)
                     log_info(username, "Login successful.")
                     first_loop = False
+                    time.sleep(5)
 
                 req_count += 1
                 log_info(username, f"Request #{req_count}")
