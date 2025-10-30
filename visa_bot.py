@@ -29,7 +29,7 @@ CORS(app, resources={r"/submit": {"origins": "*"}})
 
 # ===================== CONFIG =====================
 PRIOD_START_DEFAULT = "2027-01-01"
-PRIOD_END_DEFAULT = "2027-12-30"
+PRIOD_END_DEFAULT = "2027-12-20"
 CSV_FILE = "visa_appointments.csv"
 LOG_FILE = f"log_{datetime.now().date()}.txt"
 
