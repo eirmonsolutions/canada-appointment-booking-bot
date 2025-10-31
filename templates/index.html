@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>US Visa Appointment Bot</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    #log {font-family: monospace; background:#f8f8f8; padding:1rem; height:320px; overflow-y:auto; border:1px solid #ccc; margin-top:1rem;}
+    .running {color:green;}
+    .stopped {color:#777;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>US Visa Appointment Bot</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash">
+          {% for category, msg in messages %}
+            <li class="{{ category }}">{{ msg }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" class="cfg-form">
+      <label>Email <input name="EMAIL" value="{{ cfg.EMAIL or '' }}" required></label>
+      <label>Password <input type="password" name="PASSWORD" value="{{ cfg.PASSWORD or '' }}" required></label>
+      <label>Country (2-letter code) <input name="COUNTRY" maxlength="2" value="{{ cfg.COUNTRY or '' }}" required></label>
+      <label>Facility ID <input name="FACILITY_ID" value="{{ cfg.FACILITY_ID or '' }}"></label>
+      <label>Min date (DD.MM.YYYY) <input name="MIN_DATE" placeholder="01.11.2027" value="{{ cfg.MIN_DATE or '' }}"></label>
+      <label>Max date (DD.MM.YYYY) <input name="MAX_DATE" placeholder="30.11.2027" value="{{ cfg.MAX_DATE or '' }}"></label>
+      <label>
+        <input type="checkbox" name="NEED_ASC" {% if cfg.NEED_ASC == 'True' %}checked{% endif %}>
+        Need ASC
+      </label>
+      <label>ASC Facility ID <input name="ASC_FACILITY_ID" value="{{ cfg.ASC_FACILITY_ID or '' }}"></label>
+      <label>Schedule ID <input name="SCHEDULE_ID" value="{{ cfg.SCHEDULE_ID or '' }}"></label>
+
+      <button type="submit" name="action" value="save">Save Config</button>
+      <button type="submit" name="action" value="start" class="run">Run Bot</button>
+    </form>
+
+    <hr>
+    <h3>Live Log <span id="status" class="stopped">(stopped)</span></h3>
+    <div id="log"></div>
+
+    <details>
+      <summary>Current config (debug)</summary>
+      <pre>{{ cfg|pprint }}</pre>
+    </details>
+  </div>
+
+<script>
+  const logDiv   = document.getElementById('log');
+  const status   = document.getElementById('status');
+
+  // ---------- SSE ----------
+  const es = new EventSource('/log_stream');
+  es.onmessage = e => {
+    const line = e.data;
+    logDiv.textContent += line + "\n";
+    logDiv.scrollTop = logDiv.scrollHeight;
+
+    if (line.includes('Bot started') || line.includes('BOOKED')) status.className = 'running';
+    if (line.includes('Bot stopped')) status.className = 'stopped';
+  };
+
+  // ---------- Available dates ----------
+  fetch('/available_dates')
+    .then(r => r.json())
+    .then(dates => {
+      if (dates.length) {
+        const p = document.createElement('p');
+        p.innerHTML = '<strong>Available dates:</strong> ' + dates.join(', ');
+        logDiv.parentNode.insertBefore(p, logDiv);
+      }
+    });
+</script>
+</body>
+</html>
