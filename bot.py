@@ -111,8 +111,8 @@ class AppointmentDateLowerMinDate(Exception):
         super().__init__("Current appointment date and time lower than specified minimal date")
 
 
-EMAIL_SENDER = "manshu.developer@gmail.com"
-EMAIL_PASSWORD = "abcd efgh ijkl mnop"   # <-- YOUR APP PASSWORD
+EMAIL_SENDER = "manshusmartboy@gmail.com"
+EMAIL_PASSWORD = "cvvrefpzcxkqahen"   # <-- YOUR APP PASSWORD
 EMAIL_SMTP_SERVER = "smtp.gmail.com"
 EMAIL_SMTP_PORT = 587
 

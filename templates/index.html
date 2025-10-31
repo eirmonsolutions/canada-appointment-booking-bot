@@ -5,12 +5,82 @@
   <title>US Visa Appointment Bot</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <style>
-    #log {font-family: monospace; background:#f8f8f8; padding:1rem; height:320px; overflow-y:auto; border:1px solid #ccc; margin-top:1rem;}
-    .running {color:green;}
-    .stopped {color:#777;}
+    body {
+      display: flex;
+      gap: 2rem;
+      padding: 1rem;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .sidebar {
+      width: 260px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 1rem;
+      height: 95vh;
+      overflow-y: auto;
+    }
+
+    .sidebar h2 {
+      font-size: 1.1rem;
+      margin-bottom: .8rem;
+      color: #333;
+    }
+
+    .embassy-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .embassy-list li {
+      padding: .5rem .7rem;
+      border-bottom: 1px solid #eee;
+      font-size: .9rem;
+    }
+
+    .embassy-list li span {
+      display: block;
+      font-size: .8rem;
+      color: #666;
+    }
+
+    .container {
+      flex: 1;
+      background: white;
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    #log {
+      font-family: monospace;
+      background:#f8f8f8;
+      padding:1rem;
+      height:320px;
+      overflow-y:auto;
+      border:1px solid #ccc;
+      margin-top:1rem;
+    }
+
+    .running { color:green; }
+    .stopped { color:#777; }
+
+    form label { display:block; margin: .5rem 0; }
+    input[type="text"], input[type="password"], input[type="email"] { width:100%; }
   </style>
 </head>
 <body>
+
+  <!-- Sidebar for embassy list -->
+  <div class="sidebar">
+    <h2>Embassy Facility List</h2>
+    <ul class="embassy-list" id="embassyList"></ul>
+  </div>
+
+  <!-- Main content -->
   <div class="container">
     <h1>US Visa Appointment Bot</h1>
 
@@ -53,21 +123,39 @@
   </div>
 
 <script>
-  const logDiv   = document.getElementById('log');
-  const status   = document.getElementById('status');
+  const Embassies = {
+    "en-am-yer": ["en-am", 122, "YEREVAN – Armenia"],
+    "es-co-bog": ["es-co", 25,  "Bogotá – Colombia"],
+    "en-ca-cal": ["en-ca", 89,  "Calgary – Canada"],
+    "en-ca-hal": ["en-ca", 90,  "Halifax – Canada"],
+    "en-ca-mon": ["en-ca", 91,  "Montreal – Canada"],
+    "en-ca-ott": ["en-ca", 92,  "Ottawa – Canada"],
+    "en-ca-que": ["en-ca", 93,  "Quebec City – Canada"],
+    "en-ca-tor": ["en-ca", 94,  "Toronto – Canada"],
+    "en-ca-van": ["en-ca", 95,  "Vancouver – Canada"]
+  };
 
-  // ---------- SSE ----------
+  // populate embassy list
+  const embassyList = document.getElementById("embassyList");
+  Object.entries(Embassies).forEach(([code, [lang, id, city]]) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<strong>${city}</strong><span>Code: ${code} | Facility ID: ${id}</span>`;
+    embassyList.appendChild(li);
+  });
+
+  // log stream
+  const logDiv = document.getElementById('log');
+  const status = document.getElementById('status');
   const es = new EventSource('/log_stream');
   es.onmessage = e => {
     const line = e.data;
     logDiv.textContent += line + "\n";
     logDiv.scrollTop = logDiv.scrollHeight;
-
     if (line.includes('Bot started') || line.includes('BOOKED')) status.className = 'running';
     if (line.includes('Bot stopped')) status.className = 'stopped';
   };
 
-  // ---------- Available dates ----------
+  // available dates
   fetch('/available_dates')
     .then(r => r.json())
     .then(dates => {
