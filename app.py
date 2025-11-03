@@ -5,7 +5,7 @@ import threading
 import queue
 from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, Response
 from pathlib import Path
-
+from datetime import datetime
 # ----------------------------------------------------------------------
 # Add project root so we can import bot.py / web.config_manager
 # ----------------------------------------------------------------------
@@ -13,7 +13,9 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE))
 
 from web.config_manager import get_config, save_config
-from bot import Bot, Config, Logger, ASC_FILE, LOG_FILE, CONFIG_FILE
+from bot import Bot, Config, Logger, ASC_FILE, LOG_FILE, CONFIG_FILE, LOG_FORMAT
+
+
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -36,34 +38,52 @@ def push_log(line: str):
 # ----------------------------------------------------------------------
 # Bot starter (now creates a Logger with user-prefix + SSE callback)
 # ----------------------------------------------------------------------
-def start_bot():
-    global bot_thread, bot_instance
 
-    if bot_thread and bot_thread.is_alive():
-        flash("Bot is already running!", "error")
-        return
 
-    cfg = Config(CONFIG_FILE)                     # reads the file again
-    logger = Logger(
-        LOG_FILE,
-        "%(asctime)s  %(message)s",
-        user_prefix=cfg.email,                    # <-- [john@example.com]:
-        callback=push_log                         # <-- send to Flask
-    )
 
+# -------------------------------------------------
+# Bot starter – use dict from config_manager
+# -------------------------------------------------
+@app.route("/start", methods=["POST"])
+def start():
+    global bot_instance, bot_thread
+
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    country = data.get("embassy")   # same as "en-ca" etc.
+    period_start = data.get("period_start")
+    period_end = data.get("period_end")
+
+    # Prepare config
+    cfg = Config(CONFIG_FILE)
+    cfg.email = username
+    cfg.password = password
+    cfg.country = country
+    cfg.min_date = datetime.strptime(period_start, "%Y-%m-%d").date()
+
+    cfg.max_date = datetime.strptime(period_end, "%Y-%m-%d").date()
+    cfg.schedule_id = data.get("schedule_id")
+    cfg._Config__save()
+
+    logger = Logger(LOG_FILE, LOG_FORMAT, username, push_log)
     bot_instance = Bot(cfg, logger, ASC_FILE)
 
-    def run():
+    def run_bot():
         try:
             bot_instance.process()
         except Exception as e:
-            logger(e)
-        finally:
-            push_log("[SYSTEM]: Bot stopped")
+            push_log(f"{username}|Error: {e}")
 
-    bot_thread = threading.Thread(target=run, daemon=True)
+    if bot_thread and bot_thread.is_alive():
+        push_log(f"{username}|Bot already running.")
+        return jsonify({"status": "running"})
+
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
-    flash("Bot started in background", "success")
+
+    push_log(f"{username}|Bot started for {country}")
+    return jsonify({"status": "ok"})
 
 
 # ----------------------------------------------------------------------

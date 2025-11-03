@@ -28,8 +28,7 @@ CACHE_CONTROL_HEADERS = {
 }
 DEFAULT_HEADERS = {
     "Host": HOST,
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
-                  "like Gecko) Chrome/120.0.0.0 YaBrowser/24.1.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
     "sec-ch-ua": "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", "
                  "\"YaBrowser\";v=\"24.1\", \"Yowser\";v=\"2.5\"",
     "sec-ch-ua-mobile": "?0",
@@ -157,12 +156,21 @@ class Logger:
         self.root_logger = root_logger
 
     def __call__(self, message: str | Exception):
-        txt = str(message)
-        if self.user_prefix:
-            txt = f"[{self.user_prefix}]: {txt}"
-        self.root_logger.debug(txt, exc_info=isinstance(message, Exception))
-        if self.callback:
-            self.callback(txt)
+      txt = str(message)
+        # root log keeps original text with user prefix for file/console
+      pref = self.user_prefix or "GLOBAL"
+      root_txt = f"[{pref}] {txt}"
+      self.root_logger.debug(root_txt, exc_info=isinstance(message, Exception))
+
+        # send structured message to callback (so frontend can split by '|')
+      if self.callback:
+            try:
+                # avoid embedding '|' in the message body; replace them just in case
+                safe_txt = txt.replace("|", "¦")
+                self.callback(f"{pref}|{safe_txt}")
+            except Exception:
+                # don't break logging if callback fails
+                pass
 
 
 
@@ -264,7 +272,7 @@ class Bot:
         self.logger = logger
         self.config = config
         self.asc_file = asc_file
-        self.url = f"https://{HOST}/en-{config.country}/niv"
+        self.url = f"https://{HOST}/en-ca/niv"
 
         self.appointment_datetime: Optional[datetime] = None
         self.csrf: Optional[str] = None
@@ -543,12 +551,14 @@ class Bot:
     def process(self):
         self.init()
         while True:
-            time.sleep(1.5)
+            
             try:
+                start_time = time.time()
                 now = datetime.now()
-                if now.minute % 5 != 0 or now.second >= 10:
-                    if now.second % 10 == 0:
-                        self.logger("Wait")
+                if not (now.minute % 5 == 0 and now.second < 10):
+                    if now.second == 0:
+                        self.logger("Waiting for next polling window")
+                    time.sleep(1)
                     continue
 
                 try:
