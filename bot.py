@@ -93,7 +93,7 @@ CONFIG_FILE = "config"
 ASC_FILE = "asc"
 LOG_FILE = "log.txt"
 LOG_FORMAT = "%(asctime)s  %(message)s"
-
+error_count = 0
 
 # -------------------------- HELPERS --------------------------
 def parse_date(date_str: str) -> date:
@@ -474,7 +474,7 @@ class Bot:
         response = self.session.get(
             f"{self.url}/schedule/{self.config.schedule_id}/appointment/days/"
             f"{self.config.facility_id}.json?appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"}
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -488,7 +488,7 @@ class Bot:
         response = self.session.get(
             f"{self.url}/schedule/{self.config.schedule_id}/appointment/times/{self.config.facility_id}.json?"
             f"date={available_date}&appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"}
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -504,7 +504,7 @@ class Bot:
             f"{self.config.asc_facility_id}.json?&consulate_id={self.config.facility_id}"
             f"&consulate_date={available_date or ''}&consulate_time={available_time or ''}"
             f"&appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"}
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -520,7 +520,7 @@ class Bot:
             f"date={asc_date}&consulate_id={self.config.schedule_id}"
             f"&consulate_date={cons_date or ''}&consulate_time={cons_time or ''}"
             f"&appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"}
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -564,18 +564,21 @@ class Bot:
     def process(self):
         self.init()
         while True:
-            
             try:
                 start_time = time.time()
                 now = datetime.now()
+                error_count = 0
                 if not (now.minute % 5 == 0 and now.second < 10):
                     if now.second == 0:
                         self.logger("Waiting for next polling window")
                     time.sleep(1)
                     continue
-
                 try:
                     available_dates = self.get_available_dates()
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
+                    self.logger(f"Network issue: {err}. Retrying in 10s...")
+                    time.sleep(10)
+                    continue
                 except HTTPError as err:
                     if err.response.status_code == 401:
                         self.logger("Get 401 - Re-login")
@@ -684,7 +687,16 @@ class Bot:
                 self.logger(e)
                 break
             except Exception as e:
-                self.logger(e)
+             self.logger(f"Error: {e}")  # ✅ Message clear bana do
+             error_count += 1
+             if error_count > 10:
+                self.logger("⚠️ Too many errors — reinitializing session...")
+                try:
+                    self.init()  
+                except Exception as init_error:
+                    self.logger(f"Reinit failed: {init_error}")
+                error_count = 0  
+            time.sleep(5) 
 
 
 # -------------------------- MAIN --------------------------
