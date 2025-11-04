@@ -3,117 +3,87 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Visa Appointment Bot</title>
+  <title>Visa Appointment Bot – Multi-User</title>
   <style>
-    body {font-family: Arial; margin: 20px; background: #f4f4f4;}
-    .container {
-      max-width: 900px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    .form-group {margin: 10px 0;}
-    label {display: inline-block; width: 150px;}
-    input, select {padding: 8px; width: 250px;}
-    button {
-      padding: 10px 20px;
-      background: #007bff;
-      color: white;
-      border: none;
-      cursor: pointer;
-      margin-right: 5px;
-    }
-    button:hover {background: #0056b3;}
-    .user-card {
-      border: 1px solid #ddd;
-      padding: 15px;
-      margin: 10px 0;
-      border-radius: 8px;
-      background: #f9f9f9;
-    }
-    .logs {
-      margin-top: 10px;
-      padding: 10px;
-      background: #eee;
-      height: 150px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 12px;
-    }
-    .success {color: green; font-weight: bold;}
-    .error {color: red; font-weight: bold;}
+    body {font-family: Arial; margin:20px; background:#f4f4f4;}
+    .container {max-width:960px; margin:auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,.1);}
+    .form-group {margin:10px 0;}
+    label {display:inline-block; width:150px;}
+    input, select {padding:8px; width:250px;}
+    button {padding:8px 16px; margin-right:5px; cursor:pointer;}
+    .user-card {border:1px solid #ddd; padding:15px; margin:15px 0; border-radius:8px; background:#fafafa;}
+    .logs {margin-top:10px; padding:10px; background:#eee; height:180px; overflow-y:auto; font-family:monospace; font-size:12px;}
+    .success {color:green; font-weight:bold;}
+    .error   {color:red;   font-weight:bold;}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>US Visa Appointment Booker</h1>
+    <h1>US Visa Appointment Booker – Multi-User</h1>
     <div id="users"></div>
-    <button onclick="addUserForm()">+ Add User</button>
+    <button onclick="addUser()">+ Add User</button>
     <hr/>
-    <h2>Global Logs</h2>
+    <h2>Global Log</h2>
     <pre id="global-logs" class="logs"></pre>
   </div>
 
   <script>
-   function toDDMMYYYY(iso) {
-  return iso; // just send "2027-01-12"
-}
-    const Embassies = {
-      "en-ca-cal": ["en-ca", 89, "Continue"],
-      "en-ca-hal": ["en-ca", 90, "Continue"],
-      "en-ca-mon": ["en-ca", 91, "Continue"],
-      "en-ca-ott": ["en-ca", 92, "Continue"],
-      "en-ca-que": ["en-ca", 93, "Continue"],
-      "en-ca-tor": ["en-ca", 94, "Continue"],
-      "en-ca-van": ["en-ca", 95, "Continue"]
+    const EMBASSIES = {
+      "en-ca-cal": "Canada – Calgary",
+      "en-ca-hal": "Canada – Halifax",
+      "en-ca-mon": "Canada – Montreal",
+      "en-ca-ott": "Canada – Ottawa",
+      "en-ca-que": "Canada – Quebec",
+      "en-ca-tor": "Canada – Toronto",
+      "en-ca-van": "Canada – Vancouver"
     };
 
-    function embassyOptions() {
-      return Object.keys(Embassies).map(key => {
-        const pretty = key.toUpperCase().replace(/-/g, ' - ');
-        return `<option value="${key}">${pretty}</option>`;
-      }).join('');
-    }
+    let userCounter = 0;
 
-    let userCount = 0;
+    function embassyOptions(selected = "en-ca-tor") {
+  return Object.entries(EMBASSIES).map(([k, v]) => 
+    `<option value="${k}" ${k === selected ? 'selected' : ''}>${v}</option>`
+  ).join('');
+}
 
-    function addUserForm() {
-      userCount++;
+    function addUser() {
+      userCounter++;
       const div = document.createElement("div");
       div.className = "user-card";
-      div.id = `user-${userCount}`;
+      div.id = `user-${userCounter}`;
       div.innerHTML = `
-        <h3>User ${userCount}</h3>
-        <div class="form-group"><label>Email:</label><input type="text" class="username"/></div>
-        <div class="form-group"><label>Password:</label><input type="password" class="password"/></div>
-        <div class="form-group"><label>Schedule ID:</label><input type="text" class="schedule_id"/></div>
+        <h3>User ${userCounter}</h3>
+        <div class="form-group"><label>Email:</label><input type="email" class="email" required/></div>
+        <div class="form-group"><label>Password:</label><input type="password" class="password" required/></div>
+        <div class="form-group"><label>Schedule ID:</label><input type="text" class="schedule_id" required/></div>
         <div class="form-group"><label>Embassy:</label>
           <select class="embassy">${embassyOptions()}</select>
         </div>
-        <div class="form-group"><label>Period Start:</label><input type="date" class="period_start"/></div>
+        <div class="form-group"><label>Period Start:</label><input type="date" class="period_start" required/></div>
         <div class="form-group"><label>Period End:</label><input type="date" class="period_end"/></div>
-        <button onclick="startBot(${userCount})">Start Bot</button>
-        <button onclick="stopBot(${userCount})" disabled>Stop Bot</button>
+
+        <button onclick="startBot('${userCounter}')">Start Bot</button>
+        <button onclick="stopBot('${userCounter}')" disabled>Stop Bot</button>
         <button onclick="this.parentElement.remove()">Remove</button>
-        <div class="logs" id="log-${userCount}"></div>
+
+        <div class="logs" id="log-${userCounter}"></div>
       `;
       document.getElementById("users").appendChild(div);
     }
 
-    function startBot(id) {
-      const card = document.getElementById(`user-${id}`);
+    function startBot(cardId) {
+      const card = document.getElementById(`user-${cardId}`);
+      const email = card.querySelector(".email").value.trim();
       const data = {
-        username: card.querySelector(".username").value.trim(),
+        username: email,
         password: card.querySelector(".password").value,
         schedule_id: card.querySelector(".schedule_id").value.trim(),
         embassy: card.querySelector(".embassy").value,
-        period_start: toDDMMYYYY(card.querySelector(".period_start").value),
-        period_end: toDDMMYYYY(card.querySelector(".period_end").value)
+        period_start: card.querySelector(".period_start").value,
+        period_end: card.querySelector(".period_end").value || null
       };
 
-      if (!data.username || !data.password || !data.schedule_id) {
+      if (!email || !data.password || !data.schedule_id) {
         alert("Email, Password and Schedule ID are required");
         return;
       }
@@ -125,50 +95,53 @@
       })
       .then(r => r.json())
       .then(res => {
-        logGlobal(`Bot #${res.user_id} started for ${data.username}`);
+        if (res.error) { alert(res.error); return; }
         card.querySelector("button[onclick^=startBot]").disabled = true;
         card.querySelector("button[onclick^=stopBot]").disabled = false;
+        logGlobal(`[${email}] Bot STARTED`);
       })
-      .catch(err => logGlobal(`ERROR starting bot: ${err}`));
+      .catch(err => logGlobal(`[${email}] ERROR: ${err}`));
     }
 
-    function stopBot(id) {
-      fetch(`/stop/${id}`, {method: "POST"})
+    function stopBot(cardId) {
+      const card = document.getElementById(`user-${cardId}`);
+      const email = card.querySelector(".email").value.trim();
+
+      fetch(`/stop/${encodeURIComponent(email)}`, {method: "POST"})
         .then(() => {
-          logGlobal(`Bot #${id} stopped`);
-          const card = document.getElementById(`user-${id}`);
           card.querySelector("button[onclick^=startBot]").disabled = false;
           card.querySelector("button[onclick^=stopBot]").disabled = true;
+          logGlobal(`[${email}] Bot STOPPED`);
         });
     }
 
     function logGlobal(msg, color = "#000") {
-  const log = document.getElementById("global-logs");
-  const span = document.createElement("span");
-  span.style.color = color;
-  span.textContent = msg + "\n";
-  log.appendChild(span);
-  log.scrollTop = log.scrollHeight;
-}
+      const log = document.getElementById("global-logs");
+      const line = document.createElement("div");
+      line.style.color = color;
+      line.textContent = msg;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
 
-    const evtSource = new EventSource("/log_stream");
-    console.log("Listening to log stream...",evtSource);
-   evtSource.onmessage = e => {
-  const [uid, line] = e.data.split("|", 2);
-  const colors = ["#007bff", "#28a745", "#ff6600", "#800080"];
-  const color = colors[parseInt(uid) % colors.length] || "#000";
-  logGlobal(`[User ${uid}] ${line}`, color);
+    const evt = new EventSource("/log_stream");
+    evt.onmessage = e => {
+      const [prefix, line] = e.data.split("|", 2);
+      const colors = ["#007bff", "#28a745", "#ff6600", "#d63384", "#6f42c1"];
+      const color = colors[prefix.split("@")[0].length % colors.length] || "#000";
 
-  const logDiv = document.getElementById(`log-${uid}`);
-  if (logDiv) {
-    logDiv.textContent += line + "\n";
-    logDiv.scrollTop = logDiv.scrollHeight;
-  }
-};
+      logGlobal(`[${prefix}] ${line}`, color);
 
+      const userPane = document.getElementById(`log-${prefix}`);
+      if (userPane) {
+        const span = document.createElement("div");
+        span.textContent = line;
+        userPane.appendChild(span);
+        userPane.scrollTop = userPane.scrollHeight;
+      }
+    };
 
-
-    window.onload = () => addUserForm();
+    window.onload = () => addUser();
   </script>
 </body>
 </html>

@@ -182,6 +182,7 @@ class Appointment:
 
 
 # -------------------------- CONFIG --------------------------
+# -------------------------- CONFIG --------------------------
 class Config:
     def __init__(self, config_file: str):
         self.config_file = config_file
@@ -214,8 +215,11 @@ class Config:
         # ASC
         self.need_asc: bool = config_data.get("NEED_ASC") == "True"
 
-        self.__save()
+        self.__save()          # keep old behaviour – save defaults
 
+    # ------------------------------------------------------------------
+    # Existing helper methods (set_facility_id, set_asc_facility_id, …)
+    # ------------------------------------------------------------------
     def set_facility_id(self, locations: dict[str, str]):
         self.facility_id = self.__choose_location(locations, "consul")
         self.__save()
@@ -251,6 +255,9 @@ class Config:
                 value = None
         return value
 
+    # ------------------------------------------------------------------
+    # PRIVATE save (kept for internal calls)
+    # ------------------------------------------------------------------
     def __save(self):
         with open(self.config_file, "w") as f:
             f.write(
@@ -265,6 +272,12 @@ class Config:
                 f"SCHEDULE_ID={self.schedule_id or NONE}"
             )
 
+    # ------------------------------------------------------------------
+    # PUBLIC save – this is what Flask calls
+    # ------------------------------------------------------------------
+    def save(self):
+        """Public method used by the web UI."""
+        self.__save()
 
 # -------------------------- BOT --------------------------
 class Bot:
