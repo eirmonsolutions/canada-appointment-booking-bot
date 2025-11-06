@@ -8,12 +8,10 @@ import time
 from datetime import datetime, date, timedelta
 from typing import Optional
 from urllib.parse import urlencode
-import socket
+
 import smtplib
 from email.message import EmailMessage
 
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 import requests
 from bs4 import BeautifulSoup
@@ -96,15 +94,6 @@ ASC_FILE = "asc"
 LOG_FILE = "log.txt"
 LOG_FORMAT = "%(asctime)s  %(message)s"
 error_count = 0
-socket.setdefaulttimeout(30)
-
-retry = Retry(
-    total=5,
-    backoff_factor=2,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=None,  # Retry POST too
-)
-
 
 # -------------------------- HELPERS --------------------------
 def parse_date(date_str: str) -> date:
@@ -293,21 +282,22 @@ class Config:
 # -------------------------- BOT --------------------------
 class Bot:
     def __init__(self, config: Config, logger: Logger, asc_file: str):
-        self.session = requests.Session()
         self.logger = logger
         self.config = config
         self.asc_file = asc_file
         self.url = f"https://{HOST}/en-ca/niv"
-        retry = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retry)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
+        self.proxies = {
+            "http":  "http://148.230.86.132:5005",
+            "https": "http://148.230.86.132:5005",
+        }
+
 
         self.appointment_datetime: Optional[datetime] = None
         self.csrf: Optional[str] = None
         self.cookie: Optional[str] = None
         self.session = requests.session()
         self.asc_dates = {}
+
 
     @staticmethod
     def get_csrf(response: Response) -> str:
@@ -348,14 +338,14 @@ class Bot:
         )
 
     def login(self):
-        self.logger("TEST Get sign in")
+        self.logger("Get sign in")
         response = self.session.get(
             f"{self.url}/users/sign_in",
             headers={
                 COOKIE_HEADER: "",
                 REFERER: f"{self.url}/users/sign_in",
                 **DOCUMENT_HEADERS
-            }
+            },proxies=self.proxies
         )
         response.raise_for_status()
         cookies = response.headers.get(SET_COOKIE)
@@ -377,7 +367,7 @@ class Bot:
                 "user[password]": self.config.password,
                 "policy_confirmed": "1",
                 "commit": "Sign In"
-            })
+            }),proxies=self.proxies
         )
         response.raise_for_status()
         self.cookie = response.headers.get(SET_COOKIE)
@@ -386,7 +376,7 @@ class Bot:
         self.logger("Get current appointment")
         response = self.session.get(
             self.url,
-            headers={**self.headers(), **DOCUMENT_HEADERS}
+            headers={**self.headers(), **DOCUMENT_HEADERS},proxies=self.proxies
         )
         response.raise_for_status()
 
@@ -480,7 +470,7 @@ class Bot:
                 **DOCUMENT_HEADERS,
                 **SEC_FETCH_USER_HEADERS,
                 REFERER: f"{self.url}/schedule/{self.config.schedule_id}/continue_actions"
-            }
+            },proxies=self.proxies
         )
         response.raise_for_status()
         return response
@@ -490,7 +480,7 @@ class Bot:
         response = self.session.get(
             f"{self.url}/schedule/{self.config.schedule_id}/appointment/days/"
             f"{self.config.facility_id}.json?appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},proxies=self.proxies,timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -504,7 +494,7 @@ class Bot:
         response = self.session.get(
             f"{self.url}/schedule/{self.config.schedule_id}/appointment/times/{self.config.facility_id}.json?"
             f"date={available_date}&appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},proxies=self.proxies,timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -520,7 +510,7 @@ class Bot:
             f"{self.config.asc_facility_id}.json?&consulate_id={self.config.facility_id}"
             f"&consulate_date={available_date or ''}&consulate_time={available_time or ''}"
             f"&appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},proxies=self.proxies,timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -536,7 +526,7 @@ class Bot:
             f"date={asc_date}&consulate_id={self.config.schedule_id}"
             f"&consulate_date={cons_date or ''}&consulate_time={cons_time or ''}"
             f"&appointments[expedite]=false",
-            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},timeout=20
+            headers={**self.headers(), **JSON_HEADERS, REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"},proxies=self.proxies,timeout=20
         )
         response.raise_for_status()
         data = response.json()
@@ -574,7 +564,7 @@ class Bot:
                 "Origin": f"https://{HOST}",
                 REFERER: f"{self.url}/schedule/{self.config.schedule_id}/appointment"
             },
-            data=urlencode(body)
+            data=urlencode(body),proxies=self.proxies
         )
 
     def process(self):
@@ -584,7 +574,7 @@ class Bot:
                 start_time = time.time()
                 now = datetime.now()
                 error_count = 0
-                if not (now.minute % 2 == 0 and 2 <= now.second < 25):
+                if not (now.minute % 5 == 0 and now.second < 10):
                     if now.second == 0:
                         self.logger("Waiting for next polling window")
                     time.sleep(1)
@@ -592,17 +582,8 @@ class Bot:
                 try:
                     available_dates = self.get_available_dates()
                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
-                    error_count += 1
-                    delay = min(30 * (2 ** error_count), 300)  # Exponential: 30s, 60s, 120s... max 5 min
-                    self.logger(f"Network error ({error_count}): {err}. Retrying in {delay}s...")
-                    time.sleep(delay)
-                    if error_count > 3:
-                        self.logger("Multiple network failures — reinitializing session...")
-                        try:
-                            self.init()
-                        except Exception as e:
-                            self.logger(f"Reinit failed after network errors: {e}")
-                        error_count = 0
+                    self.logger(f"Network issue: {err}. Retrying in 10s...")
+                    time.sleep(10)
                     continue
                 except HTTPError as err:
                     if err.response.status_code == 401:
@@ -641,7 +622,6 @@ class Bot:
                     self.logger(f"Times: {times}")
                     booked = False
                     for t in times:
-                        time.sleep(random.uniform(1.5, 3.0))
                         asc_d, asc_t = None, None
                         if self.config.need_asc:
                             min_asc = adate - timedelta(days=7)
@@ -722,7 +702,7 @@ class Bot:
                 except Exception as init_error:
                     self.logger(f"Reinit failed: {init_error}")
                 error_count = 0  
-            time.sleep(random.uniform(8, 15)) 
+            time.sleep(5) 
 
 
 # -------------------------- MAIN --------------------------
