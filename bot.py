@@ -8,10 +8,12 @@ import time
 from datetime import datetime, date, timedelta
 from typing import Optional
 from urllib.parse import urlencode
-
+import socket
 import smtplib
 from email.message import EmailMessage
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 import requests
 from bs4 import BeautifulSoup
@@ -94,6 +96,15 @@ ASC_FILE = "asc"
 LOG_FILE = "log.txt"
 LOG_FORMAT = "%(asctime)s  %(message)s"
 error_count = 0
+socket.setdefaulttimeout(30)
+
+retry = Retry(
+    total=5,
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=None,  # Retry POST too
+)
+
 
 # -------------------------- HELPERS --------------------------
 def parse_date(date_str: str) -> date:
@@ -282,10 +293,15 @@ class Config:
 # -------------------------- BOT --------------------------
 class Bot:
     def __init__(self, config: Config, logger: Logger, asc_file: str):
+        self.session = requests.Session()
         self.logger = logger
         self.config = config
         self.asc_file = asc_file
         self.url = f"https://{HOST}/en-ca/niv"
+        retry = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
         self.appointment_datetime: Optional[datetime] = None
         self.csrf: Optional[str] = None
@@ -706,7 +722,7 @@ class Bot:
                 except Exception as init_error:
                     self.logger(f"Reinit failed: {init_error}")
                 error_count = 0  
-            time.sleep(5) 
+            time.sleep(random.uniform(8, 15)) 
 
 
 # -------------------------- MAIN --------------------------
