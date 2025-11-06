@@ -26,9 +26,15 @@ CONTENT_TYPE = "Content-Type"
 CACHE_CONTROL_HEADERS = {
     "Cache-Control": "no-store"
 }
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+]
 DEFAULT_HEADERS = {
     "Host": HOST,
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+   "User-Agent": random.choice(USER_AGENTS),
     "sec-ch-ua": "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", "
                  "\"YaBrowser\";v=\"24.1\", \"Yowser\";v=\"2.5\"",
     "sec-ch-ua-mobile": "?0",
@@ -570,14 +576,23 @@ class Bot:
                 error_count = 0
                 if not (now.minute % 5 == 0 and now.second < 10):
                     if now.second == 0:
-                        self.logger("Waiting for next polling window")
+                        self.logger("Waiting for next polling window...")
                     time.sleep(1)
                     continue
                 try:
                     available_dates = self.get_available_dates()
                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
-                    self.logger(f"Network issue: {err}. Retrying in 10s...")
-                    time.sleep(10)
+                    error_count += 1
+                    delay = min(30 * (2 ** error_count), 300)  # Exponential: 30s, 60s, 120s... max 5 min
+                    self.logger(f"Network error ({error_count}): {err}. Retrying in {delay}s...")
+                    time.sleep(delay)
+                    if error_count > 3:
+                        self.logger("Multiple network failures — reinitializing session...")
+                        try:
+                            self.init()
+                        except Exception as e:
+                            self.logger(f"Reinit failed after network errors: {e}")
+                        error_count = 0
                     continue
                 except HTTPError as err:
                     if err.response.status_code == 401:
@@ -616,6 +631,7 @@ class Bot:
                     self.logger(f"Times: {times}")
                     booked = False
                     for t in times:
+                        time.sleep(random.uniform(1.5, 3.0))
                         asc_d, asc_t = None, None
                         if self.config.need_asc:
                             min_asc = adate - timedelta(days=7)
