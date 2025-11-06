@@ -26,15 +26,9 @@ CONTENT_TYPE = "Content-Type"
 CACHE_CONTROL_HEADERS = {
     "Cache-Control": "no-store"
 }
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-]
 DEFAULT_HEADERS = {
     "Host": HOST,
-   "User-Agent": random.choice(USER_AGENTS),
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
     "sec-ch-ua": "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", "
                  "\"YaBrowser\";v=\"24.1\", \"Yowser\";v=\"2.5\"",
     "sec-ch-ua-mobile": "?0",
@@ -574,9 +568,9 @@ class Bot:
                 start_time = time.time()
                 now = datetime.now()
                 error_count = 0
-                if not (now.minute % 5 == 0 and now.second < 10):
+                if not (now.minute % 2 == 0 and 2 <= now.second < 25):
                     if now.second == 0:
-                        self.logger("Waiting for next polling window...")
+                        self.logger("Waiting for next polling window")
                     time.sleep(1)
                     continue
                 try:
