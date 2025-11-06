@@ -332,7 +332,7 @@ class Bot:
         )
 
     def login(self):
-        self.logger("Get sign in")
+        self.logger("TEST Get sign in")
         response = self.session.get(
             f"{self.url}/users/sign_in",
             headers={
